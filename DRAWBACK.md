@@ -142,11 +142,12 @@ Real cost, well covered by the reader-vs-model argument (§7): a person reads
 after the first pause.
 
 ### D6 — …but that argument only holds where a human reads a stream
-🟠 `open`
+🟡 `mitigated` 2026-08-30 — `streaming.mode` is now a per-profile field
+(`interactive` | `throughput`), validated at compile time. The stance below is
+enforced by the policy compiler rather than asserted in prose. P4 consumes it.
 
 For document batch processing, agentic workflows and embeddings there is no
-reader, so the buffer is pure added latency with no cover story. §7 currently
-presents it as universal.
+reader, so the buffer is pure added latency with no cover story.
 
 *Stance:* the buffer is a property of the **route profile**, not of the
 gateway. Throughput-mode scanning for non-interactive profiles.
@@ -224,11 +225,17 @@ breach.
 exclusion policy, and cache strictly within tenant boundaries.
 
 ### D14 — Audit log is in-memory
-🟡 `open`
+🟡 `open` · built 2026-08-30, limitation unchanged and now demonstrable
 
 Hash-chaining proves tamper-evidence, but the chain lives in process memory.
 Production needs append-only storage with the chain anchored externally —
 otherwise an attacker who owns the process rewrites the whole chain.
+
+*As built:* tamper-**evidence** is real and tested — editing any record breaks
+verification from that point on. Tamper-**proofing** is not, and the code says
+so: the only mutator is `AuditLog._tamper`, which exists so the demo can show
+verification failing, and which is precisely what an attacker with process
+access would do. Naming the gap in the API is better than hiding it.
 
 ### D15 — Placeholder restoration fidelity is the sharp edge, not detection
 🔴 `open` · **solve first — this is the demo.** Step 3 is the fifteen seconds the
@@ -286,16 +293,11 @@ The doc's own warning (§23). Breadth without depth places mid-table.
 convincingly, spend the saved time on the incident→action loop and dashboard.
 
 ### D20 — The control plane is described but does not yet *do* anything
-🟠 `mitigated` · **solve — best return on the list.** Route profiles are cheap to
-implement and *buy* a demo step rather than just closing a hole. They also make
-§16's data-plane/control-plane claim true in code, which matters now that the
-repo is public (D23).
+✅ `resolved` 2026-08-30 — see the Resolved log.
 
-§16 asserts a data-plane/control-plane split, which is what earns the product
-name — but nothing in the design was actually authored centrally and pushed.
-
-*Mitigation:* **route profiles** (§5) give the control plane a real artefact to
-compile and push, and make the live-policy-change demo natural.
+§16 asserted a data-plane/control-plane split, which is what earns the product
+name, but nothing was actually authored centrally and pushed. Route profiles
+now exist as a compiled, fingerprinted, hot-swappable artefact.
 
 ### D21 — The inbound/outbound asymmetry inverts for customer-facing chat
 🟡 `mitigated`
@@ -451,7 +453,25 @@ State plainly that full multi-turn analysis is out of prototype scope.
 
 ## Resolved
 
-*(Nothing yet. Entries move here with the date and what changed.)*
+### D20 — control plane now does something · 2026-08-30
+`controlplane/policy/` compiles JSON definitions into frozen, content-addressed
+`Profile` artefacts and publishes them as a versioned bundle. The data plane
+holds a dict and nothing else — a test breaks `open()` for the duration of a
+lookup to prove the hot path touches no I/O.
+
+Three profiles ship, exactly the three the Round 2 brief names:
+`customer-support`, `internal-knowledge`, `decision-support`. They differ in
+ways that matter rather than decoratively — customer-support runs toxicity
+synchronously and inverts the outbound asymmetry (D21), decision-support
+reviews every response and samples counterfactuals at 100%.
+
+Publishing is an atomic reference swap, so demo step 7 is safe to run on stage
+with traffic flowing, and every publish writes its own diff to the audit log.
+
+*Unexpected benefit:* the compiler refuses incoherent policy at authoring
+time. A typo like `block_credential` (singular) would have been a silent
+security downgrade — the profile would look configured while being wide open.
+It now fails to compile.
 
 ---
 
@@ -471,3 +491,8 @@ State plainly that full multi-turn analysis is out of prototype scope.
   undercutting §9.7. Escalated D4 — the brief names multi-turn/agentic
   compounding explicitly. Revised the §0 build order: D24/D25/D26 are
   explicitly-requested solutioning areas and now outrank D2.
+- **2026-08-30** — Phase 2 built (P2 policy engine, P8 audit log). **D20
+  resolved.** D6 mitigated in code — `streaming.mode` is a compiled per-profile
+  field. D14 built with its limitation named in the API rather than hidden.
+  Track A's P3 merged to main: 150 tests, three bugs found by end-to-end use
+  that unit tests had masked.

@@ -17,9 +17,11 @@ Portion 1 owners:
 | Path | Owner | Notes |
 |---|---|---|
 | `controlplane/engine/**` | **A** | B never edits |
+| `controlplane/policy/**` | **A** | Added 2026-08-30 (P2). New lane, nothing of B's moved |
+| `controlplane/audit/**` | **A** | Added 2026-08-30 (P8). New lane, nothing of B's moved |
 | `controlplane/gateway/**` | **B** | A never edits |
 | `controlplane/seed/**` | **B** | A consumes the *data*, never edits the generator |
-| `tests/test_engine/**` | **A** | |
+| `tests/test_engine/**`, `tests/test_policy/**`, `tests/test_audit/**` | **A** | |
 | `tests/test_gateway/**` | **B** | |
 | `CONTRACTS.md` | **both** | Only by agreement. Announce before editing |
 | `README.md` | **B** | A supplies the engine section when asked |
@@ -172,6 +174,27 @@ python scripts/demo_roundtrip.py          # B writes this; prints the proof
 - any arithmetic in the answer, still correct
 
 That is demo step 3 — *"the whole pitch in fifteen seconds"* — end to end.
+
+---
+
+## 6a. What Track B can now import
+
+Landed since Portion 1 started. Track B does not have to use any of it to
+finish P1/P13 — the Portion 1 integration is still just the four engine names
+in section 3 — but it exists and is tested.
+
+```python
+from controlplane.policy.store import ControlPlane      # authoring side
+from controlplane.policy.profile import Profile, PolicyError
+from controlplane.audit.chain import AuditLog, record_scan, text_fingerprint
+```
+
+`PolicyStore.profile_for(name)` is the hot-path lookup: a dict read, no I/O,
+raises `PolicyError` on an unknown name rather than falling back to something
+permissive. When the gateway wires this in, `X-ControlPlane-Profile` resolves
+through it instead of staying a bare string.
+
+**Nothing in `gateway/` or `seed/` was touched.**
 
 ---
 

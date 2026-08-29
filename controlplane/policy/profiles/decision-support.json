@@ -1,0 +1,17 @@
+{
+  "name": "decision-support",
+  "description": "Family E. A decision about a person: EU AI Act high-risk, so every response goes to a human and counterfactual sampling runs at 100%.",
+  "audit_level": "full",
+  "decision": {
+    "always_review": true,
+    "flag_budget_per_100": 100
+  },
+  "quality": {
+    "hallucination_tier": 2,
+    "counterfactual_sample_rate": 1.0
+  },
+  "cost": {
+    "cache_enabled": false,
+    "max_output_tokens": 1200
+  }
+}

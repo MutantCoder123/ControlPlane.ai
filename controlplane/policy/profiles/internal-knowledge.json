@@ -1,0 +1,11 @@
+{
+  "name": "internal-knowledge",
+  "description": "Family B. Employees paste customer records in; the canonical substitution case. Highest cache hit rate of the three.",
+  "quality": {
+    "hallucination_tier": 0
+  },
+  "cost": {
+    "cache_enabled": true,
+    "max_output_tokens": 1500
+  }
+}
