@@ -130,8 +130,20 @@ def tolerant_pattern(placeholder: str) -> re.Pattern[str]:
     Deliberately does NOT consume trailing punctuation: the apostrophe in
     `[[CUST_A]]'s balance` belongs to the sentence, not to us, and eating it
     would produce "Priya Sharma balance".
+
+    Two alternatives rather than one optional-bracket pattern, because those
+    two cases need different boundaries:
+
+    - bracketed - the brackets themselves terminate the token, so
+      `[[CUST_A]]s` can safely keep its plural `s`.
+    - bare (brackets lost) - needs an explicit non-alphanumeric boundary, or
+      the matcher for `CUST_A` happily matches the prefix of `CUST_AA` and
+      restores the wrong entity's value. With 26+ entities in one request
+      that is a real collision, not a theoretical one.
     """
     core = placeholder.strip("[] \t\r\n")
     parts = [re.escape(p) for p in core.split("_") if p]
     body = r"\s*_\s*".join(parts)
-    return re.compile(r"\[{0,2}\s*" + body + r"\s*\]{0,2}", re.IGNORECASE)
+    bracketed = r"\[{1,2}\s*" + body + r"\s*\]{1,2}"
+    bare = r"(?<![A-Za-z0-9_])" + body + r"(?![A-Za-z0-9_])"
+    return re.compile(f"(?:{bracketed}|{bare})", re.IGNORECASE)

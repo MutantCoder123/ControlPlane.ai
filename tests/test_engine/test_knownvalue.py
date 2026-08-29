@@ -90,6 +90,47 @@ def test_account_number_with_separators(store):
     assert store.lookup("5010 0234 5678 90").record_ref == "customer:44219"
 
 
+@pytest.mark.parametrize(
+    "rendering",
+    [
+        "50100234567890",
+        "5010 0234 5678 90",
+        "5010-0234-5678-90",
+        "5010 0234 567890",
+    ],
+)
+def test_scan_finds_a_grouped_account_number(store, rendering):
+    """Regression: lookup() handled separators but scan() never built the window.
+
+    n-gram width was set by the longest NAME in the store - two tokens - so a
+    four-token account number could not be assembled and sailed through
+    untouched. The unit test passed because it called lookup() with the whole
+    string; only an end-to-end prompt showed the hole.
+    """
+    text = f"Please check account {rendering} today."
+    hits = store.scan(text)
+    assert [h.match.record_ref for h in hits] == ["customer:44219"]
+    assert text[slice(*hits[0].span)] == rendering
+
+
+def test_numeric_widening_does_not_join_unrelated_numbers(store):
+    """Widening the window must not glue two adjacent amounts into one hit.
+
+    45230 and 12750 are both real values (two customers' balances), so they
+    SHOULD be found individually - as operands, which substitute.py then
+    leaves alone. What must not happen is "45230 12750" being read as a
+    single fourteen-digit identifier.
+    """
+    hits = store.scan("Totals were 45230 12750 last quarter.")
+    assert [h.text for h in hits] == ["45230", "12750"]
+    assert all(h.match.role == "operand" for h in hits)
+
+
+def test_unknown_grouped_number_is_not_invented(store):
+    """Widening must not manufacture a match out of unrelated digits."""
+    assert store.scan("Ref 1234 5678 9012 34 is not ours.") == []
+
+
 def test_unknown_value_does_not_match(store):
     assert store.lookup("Somebody Else") is None
     assert store.lookup("") is None

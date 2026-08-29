@@ -175,6 +175,30 @@ def test_bare_core_is_not_globally_matched(ph):
 # is_placeholder / find_placeholders
 # --------------------------------------------------------------------------
 
+def test_label_prefix_collision(ph):
+    """`CUST_A`'s matcher must not match inside `[[CUST_AA]]`.
+
+    Regression. With brackets simply optional, the pattern for CUST_A matched
+    the prefix of CUST_AA and restored the wrong entity's real value into the
+    answer - a wrong-customer data leak produced by the very component meant
+    to prevent one. Fires whenever a request mentions 27+ entities.
+    """
+    a = make_placeholder("customer_name", 0)     # [[CUST_A]]
+    aa = make_placeholder("customer_name", 26)   # [[CUST_AA]]
+    assert a.strip("[]") != aa.strip("[]")
+
+    assert not tolerant_pattern(a).search(aa)
+    assert not tolerant_pattern(a).search(aa.strip("[]"))
+    assert tolerant_pattern(aa).search(aa)
+
+
+def test_bare_core_needs_a_word_boundary(ph):
+    core = ph.strip("[]")
+    assert not tolerant_pattern(ph).search(f"X{core}")
+    assert not tolerant_pattern(ph).search(f"{core}9")
+    assert tolerant_pattern(ph).search(f"see {core} here")
+
+
 def test_is_placeholder_accepts_canonical_and_degraded(ph):
     assert is_placeholder(ph)
     assert is_placeholder(ph.lower())

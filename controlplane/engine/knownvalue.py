@@ -139,8 +139,15 @@ class KnownValueStore:
         self._index: dict[bytes, KnownMatch] = {}
         self._bloom = _BloomFilter(capacity, error_rate)
         self._max_tokens = 1
+        self._has_digit_keys = False
         self._records = 0
         self._skipped_ungoverned = 0
+
+    #: A digit identifier can arrive split across tokens - "5010 0234 5678 90"
+    #: is the same account as "50100234567890" and a human pastes whichever
+    #: their screen showed. Capped so a long numeric table does not turn the
+    #: scan quadratic.
+    MAX_NUMERIC_TOKENS = 8
 
     # -- construction ------------------------------------------------------
 
@@ -182,6 +189,8 @@ class KnownValueStore:
         alt = digits_key(value)
         if alt and alt != key:
             self._register(alt, match)
+        if alt:
+            self._has_digit_keys = True
 
         self._max_tokens = max(self._max_tokens, len(key.split(" ")))
 
@@ -222,7 +231,14 @@ class KnownValueStore:
         hits: list[KnownHit] = []
         i = 0
         while i < len(tokens):
-            max_size = min(self._max_tokens, _run_length(text, tokens, i))
+            run = _run_length(text, tokens, i)
+            width = self._max_tokens
+            if self._has_digit_keys:
+                # A grouped account or card number spans more tokens than any
+                # name does. Widen the window only across numeric tokens, so
+                # the extra work is bounded to the places it can pay off.
+                width = max(width, min(_numeric_run(tokens, i), self.MAX_NUMERIC_TOKENS))
+            max_size = min(width, run)
             for size in range(max_size, 0, -1):
                 window = tokens[i : i + size]
                 candidate = " ".join(t[2] for t in window)
@@ -282,6 +298,19 @@ def _run_length(text: str, tokens: list[tuple[int, int, str]], start: int) -> in
             break
         n += 1
     return n
+
+
+def _numeric_run(tokens: list[tuple[int, int, str]], start: int) -> int:
+    """How many consecutive tokens from `start` are digits and separators."""
+    n = 0
+    while start + n < len(tokens):
+        tok = tokens[start + n][2]
+        if not tok or not all(ch.isdigit() or ch in "-/." for ch in tok):
+            break
+        if not any(ch.isdigit() for ch in tok):
+            break
+        n += 1
+    return max(n, 1)
 
 
 def _tokenise(text: str) -> list[tuple[int, int, str]]:
