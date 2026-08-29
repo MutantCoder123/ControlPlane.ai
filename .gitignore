@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.env
+*.egg-info/
+dist/
+build/
+.vscode/
+.idea/
+controlplane/seed/data/*.jsonl
+
+# local agent settings
+.claude/
+
+# problem brief - not for the public repo
+Hackathon_guideline.txt

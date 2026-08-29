@@ -1,0 +1,14 @@
+# Append only. Never remove another track's dependency.
+
+# --- both ---
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pytest>=8.0
+
+# --- Track B (gateway) ---
+httpx>=0.27
+openai>=1.40          # used in tests as a real client against our own server
+
+# --- Track A (engine) ---
+# stdlib only so far (hashlib, re, unicodedata). Add here if that changes.
