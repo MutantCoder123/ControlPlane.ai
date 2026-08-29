@@ -4,7 +4,12 @@
   "audit_level": "full",
   "decision": {
     "always_review": true,
-    "flag_budget_per_100": 100
+    "flag_budget_per_100": 100,
+    "block_at": 0.85,
+    "review_band": [
+      0.4,
+      0.85
+    ]
   },
   "quality": {
     "hallucination_tier": 2,

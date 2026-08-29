@@ -24,10 +24,10 @@ one line — its `base_url` — and nothing else.
 | Hash-chained audit log (P8) | ✅ done | 25 |
 | Gateway spine (P1) | 🔨 Track B | |
 | Seed data + traffic simulator (P13) | 🔨 Track B | |
-| Decision tiers + HITL (P6) | ⬜ next | |
-| Feedback loop (P9) | ⬜ next | |
-| Metrics + canaries (P10) | ⬜ not started | |
-| Cost ledger (P11) | ⬜ not started | |
+| Decision tiers + HITL (P6) | ✅ done | 24 |
+| Feedback loop (P9) | ✅ done | 22 |
+| Metrics + canaries (P10) | ⬜ next | |
+| Cost ledger (P11) | ⬜ next | |
 | Commit-point buffer (P4) | ⬜ not started | |
 | Async quality checks (P7) | ⬜ not started | |
 | Dashboard (P12) | ⬜ not started | |
@@ -93,6 +93,27 @@ scanned.text
 # change policy live, no restart; the diff writes itself to the audit chain
 store.publish(cp.compile_bundle(overrides={"internal-knowledge": {"cost": {"cache_enabled": False}}}))
 log.verify()          # VerificationResult(ok=True, ...)
+```
+
+The same finding resolves differently per profile — public-facing output
+justifies stopping earlier than an internal assistant does:
+
+```
+SAME FINDING (confidence 0.80), THREE PROFILES:
+  customer-support     block_at=0.75  ->  BLOCK
+  decision-support     block_at=0.85  ->  REVIEW
+  internal-knowledge   block_at=0.90  ->  REVIEW
+```
+
+And the loop closes — four reviewer overrides retune the policy, and the next
+identical request is allowed, with a readable diff on the audit chain:
+
+```
+BEFORE feedback : review
+override rate   : 100% over 4 reviews
+applied         : 4 of 4 reviews overturned pattern:payment_card
+AFTER feedback  : allow (exempted by policy)
+audit diff      : {'decision.exempt': ['[]', "['pattern:payment_card']"]}
 ```
 
 ---
