@@ -1,0 +1,40 @@
+{
+  "description": "Defaults every profile inherits. Safe if a profile forgets something.",
+  "geography": "IN",
+  "audit_level": "standard",
+  "inbound": {
+    "substitute_pii": true,
+    "block_credentials": true,
+    "known_value_matching": true
+  },
+  "outbound": {
+    "block_credentials": true,
+    "scan_pii": false,
+    "cross_tenant_check": false
+  },
+  "streaming": {
+    "mode": "interactive",
+    "commit_tokens": 40,
+    "commit_ms": 250,
+    "overlap_chars": 50
+  },
+  "decision": {
+    "block_at": 0.9,
+    "review_band": [
+      0.5,
+      0.9
+    ],
+    "flag_budget_per_100": 10,
+    "always_review": false
+  },
+  "quality": {
+    "hallucination_tier": 0,
+    "toxicity_sync": false,
+    "counterfactual_sample_rate": 0.0
+  },
+  "cost": {
+    "cache_enabled": false,
+    "max_output_tokens": 1024,
+    "request_budget_usd": 0.5
+  }
+}

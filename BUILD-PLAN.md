@@ -17,25 +17,44 @@ Last updated: 2026-08-29.
 
 | ID | Part | Size | Depends on | Verdict | Drawbacks owned |
 |---|---|---|---|---|---|
-| **P1** | Gateway spine | M | — | **build** | D3 |
-| **P2** | Profile engine (control plane) | M | P1 | **build** | **D20**, D6 |
-| **P3** | Substitution engine | L | *none — library* | **build deep** | **D15**, D9, D10, D16 |
+| **P1** | Gateway spine | M | — | 🔨 Track B | D3 |
+| **P2** | Profile engine (control plane) | M | — | ✅ **done** | **D20**, D6 |
+| **P3** | Substitution engine | L | *none — library* | ✅ **done** | **D15**, D9, D10, D16 |
 | **P4** | Outbound stream guard | M | P1 | **build** | D5, D6 |
 | **P5** | Pre-flight gate | S | P1 P2 P3 | **build** | — |
 | **P6** | Decision engine (tiers + HITL) | M | P2 | **build** | **D26** |
 | **P7** | Async quality checks | M | P1 | **thin build** | D11, D12, D27 |
-| **P8** | Audit log | S | *none — library* | **build** | D14 |
+| **P8** | Audit log | S | *none — library* | ✅ **done** | D14 |
 | **P9** | Feedback loop | M | P6 P8 | **build** | **D24**, D4 |
 | **P10** | Metrics & canaries | M | P8 P13 | **build** | **D25**, D7 |
 | **P11** | Cost ledger | M | P1 | **build** | D7 |
 | **P12** | Dashboard | L | P8–P11 | **build** | — |
-| **P13** | Traffic simulator + seed data | S | *none* | **build first-ish** | D28 |
+| **P13** | Traffic simulator + seed data | S | *none* | 🔨 Track B | D28 |
 | **P14** | Repo, README, demo cut | M | all | **build** | **D22**, **D23** |
 
 **Three parts have no dependencies and can start immediately:** P3, P8, P13.
 That is the natural split if more than one person is building.
 
 **Critical path to a demo:** P1 → P3 → P5 → P4 → P14.
+
+---
+
+## 1a. Phase plan for the remaining work
+
+Portion 1 split across two people. Everything after it is sequenced into five
+phases, one at a time, with Track B (P1, P13) landing independently.
+
+| Phase | Parts | Drawbacks | State |
+|---|---|---|---|
+| 1. Portion 1 | P3 (Track A), P1 + P13 (Track B) | D15, D9, D10, D16, D28, D3, D2 | P3 ✅ · Track B 🔨 |
+| **2. Policy & Audit** | P2, P8 | **D20** ✅, D6, D14 | ✅ **done** |
+| 3. Decision & Feedback | P6, P9 | **D26**, **D24**, D4 | next |
+| 4. Measurement & Cost | P10, P11 | **D25**, D7 | |
+| 5. Stream & Quality | P4, P7 | D5, D6, D11, D12, D27 | |
+| 6. Surface & Delivery | P12, P14 | **D22**, **D23**, D17, D18 | |
+
+P5 (pre-flight gate) is orchestration over Track B's gateway and lands with
+integration rather than in a phase of its own.
 
 ---
 
@@ -224,3 +243,13 @@ than in Q&A (D15), and it is a pure library that needs no gateway to exist yet.
 
 If splitting across people: **P3**, **P8**, and **P13** have no dependencies and
 can begin at the same time.
+
+---
+
+## 7. Changelog
+
+- **2026-08-29** — Created, fourteen parts.
+- **2026-08-30** — P3 done and merged (Track A, 150 tests). Phase plan added.
+  Phase 2 done: P2 policy engine and P8 audit log, 203 tests total. D20
+  resolved; D6 mitigated in code; D14 built with its limitation named in the
+  API.

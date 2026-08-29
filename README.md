@@ -17,20 +17,20 @@ one line — its `base_url` — and nothing else.
 > not exist yet.** On a public repo, a claim the code does not contain reads as
 > vapour. See D23 in [DRAWBACK.md](DRAWBACK.md).
 
-| Part | State |
-|---|---|
-| Substitution engine (P3) | 🔨 Portion 1 — Track A |
-| Gateway spine (P1) | 🔨 Portion 1 — Track B |
-| Seed data + traffic simulator (P13) | 🔨 Portion 1 — Track B |
-| Profile engine / control plane (P2) | ⬜ not started |
-| Commit-point buffer (P4) | ⬜ not started |
-| Decision tiers + HITL (P6) | ⬜ not started |
-| Async quality checks (P7) | ⬜ not started |
-| Hash-chained audit log (P8) | ⬜ not started |
-| Feedback loop (P9) | ⬜ not started |
-| Metrics + canaries (P10) | ⬜ not started |
-| Cost ledger (P11) | ⬜ not started |
-| Dashboard (P12) | ⬜ not started |
+| Part | State | Tests |
+|---|---|---|
+| Substitution engine (P3) | ✅ done | 150 |
+| Profile engine / control plane (P2) | ✅ done | 28 |
+| Hash-chained audit log (P8) | ✅ done | 25 |
+| Gateway spine (P1) | 🔨 Track B | |
+| Seed data + traffic simulator (P13) | 🔨 Track B | |
+| Decision tiers + HITL (P6) | ⬜ next | |
+| Feedback loop (P9) | ⬜ next | |
+| Metrics + canaries (P10) | ⬜ not started | |
+| Cost ledger (P11) | ⬜ not started | |
+| Commit-point buffer (P4) | ⬜ not started | |
+| Async quality checks (P7) | ⬜ not started | |
+| Dashboard (P12) | ⬜ not started | |
 
 Scope and ordering: [BUILD-PLAN.md](BUILD-PLAN.md).
 
@@ -70,6 +70,29 @@ Portion 1 is done when this works from a clean checkout:
 python -m controlplane.seed.generate      # writes seed/data/records.jsonl
 python -m controlplane.gateway.app        # serves on :8000
 python scripts/demo_roundtrip.py          # prints the proof
+```
+
+---
+
+## What works today
+
+```python
+from controlplane.policy.store import ControlPlane
+from controlplane.audit.chain import AuditLog, attach_to_store
+from controlplane.engine.substitute import SubstitutionEngine
+
+cp    = ControlPlane()
+store = cp.store(default_profile="internal-knowledge")
+log   = AuditLog(); attach_to_store(log, store)
+eng   = SubstitutionEngine("tests/test_engine/fixtures/records.jsonl")
+
+scanned = eng.scan_inbound("Refund Priya Sharma on account 5010 0234 5678 90.")
+scanned.text
+# 'Refund [[CUST_A]] on account [[ACCT_A]].'   <- what the provider receives
+
+# change policy live, no restart; the diff writes itself to the audit chain
+store.publish(cp.compile_bundle(overrides={"internal-knowledge": {"cost": {"cache_enabled": False}}}))
+log.verify()          # VerificationResult(ok=True, ...)
 ```
 
 ---

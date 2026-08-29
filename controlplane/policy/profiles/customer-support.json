@@ -1,0 +1,19 @@
+{
+  "name": "customer-support",
+  "description": "Family A. Output reaches the public, so the catastrophic direction is outbound: customer X shown customer Y's record (D21).",
+  "outbound": {
+    "scan_pii": true,
+    "cross_tenant_check": true
+  },
+  "quality": {
+    "hallucination_tier": 2,
+    "toxicity_sync": true
+  },
+  "decision": {
+    "flag_budget_per_100": 5
+  },
+  "cost": {
+    "cache_enabled": false,
+    "max_output_tokens": 800
+  }
+}
