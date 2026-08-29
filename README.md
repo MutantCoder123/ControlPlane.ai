@@ -38,14 +38,18 @@ Scope and ordering: [BUILD-PLAN.md](BUILD-PLAN.md).
 
 ## Documents
 
+**New to the project? → [ONBOARDING.md](ONBOARDING.md)**
+
 | File | What it is |
 |---|---|
+| [ONBOARDING.md](ONBOARDING.md) | **Start here** — context, setup, first day |
+| [WORKFLOW.md](WORKFLOW.md) | How the two tracks work together |
+| [CONTRACTS.md](CONTRACTS.md) | **The interface between the tracks — read before coding** |
+| [TRACK-A.md](TRACK-A.md) | Brief: substitution engine |
+| [TRACK-B.md](TRACK-B.md) | Brief: gateway spine + seed data |
 | [IDEATION.md](IDEATION.md) | The design — what we are building and why |
 | [DRAWBACK.md](DRAWBACK.md) | Internally honest gaps, weaknesses and accepted trade-offs |
 | [BUILD-PLAN.md](BUILD-PLAN.md) | The fourteen parts, sized and ordered |
-| [CONTRACTS.md](CONTRACTS.md) | **The interface between the two tracks — read before coding** |
-| [TRACK-A.md](TRACK-A.md) | Brief: substitution engine |
-| [TRACK-B.md](TRACK-B.md) | Brief: gateway spine + seed data |
 | [Implementation.md](Implementation.md) | Approach trade-offs per technique |
 
 ---
