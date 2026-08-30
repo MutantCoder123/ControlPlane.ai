@@ -10,7 +10,12 @@
     "toxicity_sync": true
   },
   "decision": {
-    "flag_budget_per_100": 5
+    "flag_budget_per_100": 5,
+    "block_at": 0.75,
+    "review_band": [
+      0.35,
+      0.75
+    ]
   },
   "cost": {
     "cache_enabled": false,

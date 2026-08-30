@@ -231,13 +231,17 @@ def test_policy_change_is_written_to_the_audit_log(control):
     store = control.store(default_profile="internal-knowledge")
     attach_to_store(log, store)
 
+    before = store.profile_for("customer-support").decision.block_at
     store.publish(
         control.compile_bundle(overrides={"customer-support": {"decision": {"block_at": 0.6}}})
     )
 
     changes = log.by_event("policy_change")
     assert len(changes) == 1
-    assert changes[0].payload["changes"]["customer-support"]["decision.block_at"] == ["0.9", "0.6"]
+    assert changes[0].payload["changes"]["customer-support"]["decision.block_at"] == [
+        str(before),
+        "0.6",
+    ]
     assert log.verify()
 
 

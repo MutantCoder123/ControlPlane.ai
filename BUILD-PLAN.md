@@ -22,12 +22,12 @@ Last updated: 2026-08-29.
 | **P3** | Substitution engine | L | *none — library* | ✅ **done** | **D15**, D9, D10, D16 |
 | **P4** | Outbound stream guard | M | P1 | **build** | D5, D6 |
 | **P5** | Pre-flight gate | S | P1 P2 P3 | **build** | — |
-| **P6** | Decision engine (tiers + HITL) | M | P2 | **build** | **D26** |
+| **P6** | Decision engine (tiers + HITL) | M | P2 | ✅ **done** | **D26** |
 | **P7** | Async quality checks | M | P1 | **thin build** | D11, D12, D27 |
 | **P8** | Audit log | S | *none — library* | ✅ **done** | D14 |
-| **P9** | Feedback loop | M | P6 P8 | **build** | **D24**, D4 |
-| **P10** | Metrics & canaries | M | P8 P13 | **build** | **D25**, D7 |
-| **P11** | Cost ledger | M | P1 | **build** | D7 |
+| **P9** | Feedback loop | M | P6 P8 | ✅ **done** | **D24**, D4 |
+| **P10** | Metrics & canaries | M | P8 P13 | ✅ **done** | **D25**, D7 |
+| **P11** | Cost ledger | M | — | ✅ **done** | D7 |
 | **P12** | Dashboard | L | P8–P11 | **build** | — |
 | **P13** | Traffic simulator + seed data | S | *none* | 🔨 Track B | D28 |
 | **P14** | Repo, README, demo cut | M | all | **build** | **D22**, **D23** |
@@ -48,9 +48,9 @@ phases, one at a time, with Track B (P1, P13) landing independently.
 |---|---|---|---|
 | 1. Portion 1 | P3 (Track A), P1 + P13 (Track B) | D15, D9, D10, D16, D28, D3, D2 | P3 ✅ · Track B 🔨 |
 | **2. Policy & Audit** | P2, P8 | **D20** ✅, D6, D14 | ✅ **done** |
-| 3. Decision & Feedback | P6, P9 | **D26**, **D24**, D4 | next |
-| 4. Measurement & Cost | P10, P11 | **D25**, D7 | |
-| 5. Stream & Quality | P4, P7 | D5, D6, D11, D12, D27 | |
+| **3. Decision & Feedback** | P6, P9 | **D26** ✅, **D24** ✅, D4 | ✅ **done** |
+| **4. Measurement & Cost** | P10, P11 | **D25** ✅, D7 ✅ | ✅ **done** |
+| 5. Stream & Quality | P4, P7 | D5, D6, D11, D12, D27 | next |
 | 6. Surface & Delivery | P12, P14 | **D22**, **D23**, D17, D18 | |
 
 P5 (pre-flight gate) is orchestration over Track B's gateway and lands with
@@ -253,3 +253,9 @@ can begin at the same time.
   Phase 2 done: P2 policy engine and P8 audit log, 203 tests total. D20
   resolved; D6 mitigated in code; D14 built with its limitation named in the
   API.
+- **2026-08-30** — Phase 3 done: P6 decision tiers and P9 feedback loop, 249
+  tests total. D26 and D24 resolved; D4 mitigated via counter-only session
+  tracking. Four of the brief's six solutioning areas are now implemented.
+- **2026-08-30** — Phase 4 done: P10 metrics/canaries and P11 cost ledger, 296
+  tests total. D25 and D7 resolved. Five of the brief's six solutioning areas
+  implemented; only Detection's async half (P7) remains.

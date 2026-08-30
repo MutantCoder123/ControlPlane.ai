@@ -19,9 +19,13 @@ Portion 1 owners:
 | `controlplane/engine/**` | **A** | B never edits |
 | `controlplane/policy/**` | **A** | Added 2026-08-30 (P2). New lane, nothing of B's moved |
 | `controlplane/audit/**` | **A** | Added 2026-08-30 (P8). New lane, nothing of B's moved |
+| `controlplane/decision/**` | **A** | Added 2026-08-30 (P6). New lane |
+| `controlplane/feedback/**` | **A** | Added 2026-08-30 (P9). New lane |
+| `controlplane/cost/**` | **A** | Added 2026-08-30 (P11). New lane |
+| `controlplane/metrics/**` | **A** | Added 2026-08-30 (P10). New lane |
 | `controlplane/gateway/**` | **B** | A never edits |
 | `controlplane/seed/**` | **B** | A consumes the *data*, never edits the generator |
-| `tests/test_engine/**`, `tests/test_policy/**`, `tests/test_audit/**` | **A** | |
+| `tests/test_engine/**`, `tests/test_policy/**`, `tests/test_audit/**`, `tests/test_decision/**`, `tests/test_feedback/**`, `tests/test_cost/**`, `tests/test_metrics/**` | **A** | |
 | `tests/test_gateway/**` | **B** | |
 | `CONTRACTS.md` | **both** | Only by agreement. Announce before editing |
 | `README.md` | **B** | A supplies the engine section when asked |
@@ -187,7 +191,17 @@ in section 3 — but it exists and is tested.
 from controlplane.policy.store import ControlPlane      # authoring side
 from controlplane.policy.profile import Profile, PolicyError
 from controlplane.audit.chain import AuditLog, record_scan, text_fingerprint
+from controlplane.decision.tiers import DecisionEngine, signals_from_findings
+from controlplane.feedback.session import SessionRiskTracker
+from controlplane.cost.ledger import CostLedger, BudgetExceeded
+from controlplane.metrics.registry import MetricsRegistry
 ```
+
+`DecisionEngine.decide(signals, profile)` returns a `Decision` whose `.tier` is
+one of `allow` / `annotate` / `review` / `block`, and whose `.audit_payload()`
+is safe to hand straight to the audit log. When the gateway wires this in, the
+pipeline's block/allow choice comes from the decision rather than from
+`ScanResult.blocked` alone.
 
 `PolicyStore.profile_for(name)` is the hot-path lookup: a dict read, no I/O,
 raises `PolicyError` on an unknown name rather than falling back to something

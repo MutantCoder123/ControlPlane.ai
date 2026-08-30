@@ -100,6 +100,12 @@ class DecisionPolicy:
     #: person-decision routes everything to a human regardless of confidence,
     #: because the legal exposure justifies the cost.
     always_review: bool = False
+    #: Values a reviewer has judged not worth flagging here. This is what the
+    #: feedback loop writes to (IDEATION section 13.3): we tune thresholds and
+    #: exception lists, never model weights, because a customer must be able
+    #: to read the diff and see why a decision changed. Matched against a
+    #: finding's category, its record_ref, or "kind:category".
+    exempt: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -144,6 +150,7 @@ class Profile:
         data.pop("fingerprint", None)
         data["streaming"]["mode"] = self.streaming.mode
         data["decision"]["review_band"] = list(self.decision.review_band)
+        data["decision"]["exempt"] = list(self.decision.exempt)
         return data
 
     def with_fingerprint(self) -> "Profile":
@@ -223,9 +230,14 @@ def compile_profile(definition: dict, base: dict | None = None) -> Profile:
             # A typo in a policy file is a silent security downgrade if we
             # ignore it - "block_credential: true" would simply not apply.
             raise PolicyError(f"{name}.{section}: unknown keys {sorted(unknown)}")
-        if section == "decision" and "review_band" in payload:
+        if section == "decision":
             payload = dict(payload)
-            payload["review_band"] = tuple(payload["review_band"])
+            if "review_band" in payload:
+                payload["review_band"] = tuple(payload["review_band"])
+            if "exempt" in payload:
+                # Sorted so the fingerprint is stable regardless of the order
+                # a reviewer happened to add exemptions in.
+                payload["exempt"] = tuple(sorted(payload["exempt"]))
         kwargs[section] = cls(**payload)
 
     profile = Profile(**kwargs)
@@ -248,6 +260,17 @@ def _validate(p: Profile) -> None:
         raise PolicyError(f"{p.name}: block_at must be between 0 and 1")
     if p.decision.flag_budget_per_100 < 0:
         raise PolicyError(f"{p.name}: flag budget cannot be negative")
+    if any(not isinstance(e, str) or not e for e in p.decision.exempt):
+        raise PolicyError(f"{p.name}: exemptions must be non-empty strings")
+    # An exemption is a deliberate hole in the detector. Letting one apply to
+    # credentials would let a reviewer switch off the one check that guards
+    # against irreversible harm, one override at a time.
+    banned = {"api_key", "jwt", "private_key"}
+    if banned & {e.split(":")[-1] for e in p.decision.exempt}:
+        raise PolicyError(
+            f"{p.name}: credentials cannot be exempted - blocking them is not "
+            "a tunable (IDEATION 9.5)"
+        )
 
     if p.quality.hallucination_tier not in (0, 1, 2):
         raise PolicyError(f"{p.name}: hallucination_tier must be 0, 1 or 2")

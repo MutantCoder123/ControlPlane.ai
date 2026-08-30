@@ -153,13 +153,16 @@ reader, so the buffer is pure added latency with no cover story.
 gateway. Throughput-mode scanning for non-interactive profiles.
 
 ### D7 — We add cost to a system we claim reduces cost
-🟡 `mitigated`
+✅ `resolved` 2026-08-30 — enforced by the API shape, not by discipline.
 
 Consistency sampling and counterfactual probing multiply token spend.
 
-*Mitigation:* cap evaluation spend as a share of protected spend, adaptive
-sampling, and **report gross saving, our overhead, and net** rather than a
-flattering gross number. A judge who suspects we are hiding it will ask.
+*As built:* every ledger entry is tagged `protected` or `overhead`, and
+`SavingsReport` returns gross, overhead and net **together**. There is
+deliberately no way to ask the ledger for a bare gross figure — if the
+flattering number is the only one obtainable, it is the one that reaches the
+slide. `overhead_share` reports our spend as a fraction of what we protect,
+which is the cap §15.5 asks for.
 
 ### D8 — Fail-closed on the PII checker means our outage breaks their app
 🟡 `accepted`
@@ -349,7 +352,7 @@ The brief names six solutioning areas. We were strong on three, partial on one,
 and absent on two. These entries are the delta.
 
 ### D24 — We had no feedback loop, and it collides with statelessness
-🔴 `mitigated` · **solve — it is the incident→action loop we already wanted**
+✅ `resolved` 2026-08-30 — see the Resolved log.
 
 "Feedback loops — how flagged or overridden cases feed back to improve
 detection quality over time" is an explicit solutioning area, and we had
@@ -367,7 +370,7 @@ concentration risk §3 exists to avoid and makes our behaviour unauditable. We
 tune thresholds and exception lists — diffable, revertible, explainable.
 
 ### D25 — We could not measure our own false positive / negative rates
-🔴 `mitigated` · **solve — cheap with simulated data**
+✅ `resolved` 2026-08-30 — see the Resolved log.
 
 The brief asks how we would "define, measure, and report false
 positive/negative rates and overall system trustworthiness to a skeptical
@@ -386,7 +389,7 @@ asked for, and "here is how we measure being wrong" is a rare thing for a
 student team to show a jury.
 
 ### D26 — Decision logic had no "flag for review" tier and no human-in-the-loop
-🟠 `mitigated` · **solve — mostly design, small build**
+✅ `resolved` 2026-08-30 — see the Resolved log.
 
 We had block / substitute / annotate / abstain. The brief asks for "tiered
 responses (allow / edit / flag for review / block), and clear rules for when a
@@ -435,7 +438,16 @@ governance exists, the baseline is the floor where it does not, and coverage
 degrades gracefully rather than falling to zero.
 
 ### D4 escalation — multi-turn and agentic compounding is now named by the brief
-🟠 (was ⚪) · **answer, don't build**
+🟡 `mitigated` 2026-08-30 — the architectural half is now built.
+`feedback/session.py` tracks cumulative disclosure and agent-step budgets from
+**counters only**: turns, distinct record *references*, step counts. A test
+asserts the counters dataclass has no field capable of holding content.
+
+Six turns each touching one new customer trips a cumulative-disclosure budget
+even though no single turn looked alarming — which is exactly the compounding
+risk the brief describes, caught without storing a prompt. Full multi-turn
+*reasoning* (did turn 3 contradict turn 1?) remains out of scope and stated as
+such: we did not keep turn 1.
 
 The brief calls out "multi-turn conversations and AI agents that take actions
 (not just generate text)" as compounding risk. §22 already lists "no multi-turn
@@ -452,6 +464,72 @@ State plainly that full multi-turn analysis is out of prototype scope.
 ---
 
 ## Resolved
+
+### D25 — we can now measure being wrong, honestly · 2026-08-30
+`controlplane/metrics/`. The asymmetry is built into the API rather than
+described in prose: FP comes from reviewer disagreement and is exact; FN is
+**estimated** from seeded canaries, and `CanaryReport.__str__` cannot render a
+catch rate without also rendering the seeded distribution and a 95% Wilson
+interval. A bare number is unobtainable by construction.
+
+`not_measured` names the two proxies we did *not* build — dual-detector
+disagreement and downstream incident correlation — plus unknown-unknowns. A
+report listing only what it measured invites the reader to assume it measured
+everything.
+
+There is deliberately **no single trust score**. Anyone can average six
+numbers onto a dial; the dial is exactly what a sceptical stakeholder should
+refuse, because it hides which input moved. Metrics are per profile only —
+`TrustReport` has no global aggregate to ask for.
+
+*Found by the instrument, in the instrument:* the first sweep reported 90%.
+The miss was not a detector blind spot — the AWS canary was 19 characters
+where a real key id is 20, so it matched nothing and quietly depressed our own
+score. Without the self-check test now guarding every template, we would have
+gone hunting a gap that did not exist. Current sweep: 100% (80/80, CI
+95.4–100%).
+
+### D7 — gross, overhead and net, or nothing · 2026-08-30
+See the D7 entry above. The ledger cannot produce a flattering number in
+isolation, which is a stronger guarantee than remembering to be honest.
+
+### D26 — decision logic now has four tiers and escalation rules · 2026-08-30
+`controlplane/decision/tiers.py`. Allow / annotate / review / block, resolved
+from **severity × confidence × profile** — never the finding alone. The same
+0.80-confidence finding now BLOCKS on `customer-support` and goes to REVIEW on
+`internal-knowledge`, because public-facing output justifies stopping earlier.
+
+Humans are pulled in on mid-band confidence, on `always_review` profiles, on
+policy-exception requests (D16), and on novel patterns where our confidence
+estimate is itself unreliable.
+
+Over-flagging is *tuned, not solved*, as the brief demands: a per-profile flag
+budget suppresses user-visible flags once spent and diverts them to sampling,
+and nothing is flagged without actionable evidence — "possible issue" is the
+fatigue, not the fix.
+
+*Two guards worth noting:* the budget can never suppress a BLOCK, or a noisy
+period would silently disable the security control; and the compiler refuses
+any profile that exempts a credential, so a reviewer cannot switch off
+irreversible-harm blocking one override at a time.
+
+### D24 — the feedback loop exists, and statelessness survived it · 2026-08-30
+`controlplane/feedback/loop.py`. The resolution held up under test: the data
+plane stays stateless, the control plane learns.
+
+Four overrides on the same signature produce an exemption proposal, which
+recompiles and republishes the bundle, and the next identical request resolves
+ALLOW instead of REVIEW — with the reason `exempted by policy` and a readable
+diff in the audit chain. That is the incident→action loop §23 asked for.
+
+The load-bearing test asserts the review queue holds `customer:44219` but not
+"Priya", "Sharma", the account number, or any word of the prompt. If content
+could reach the queue, the loop would have quietly rebuilt the concentration
+risk §3 exists to avoid.
+
+*Deliberately conservative:* three independent reviews minimum before anything
+is proposed. One annoyed reviewer at 5pm on a Friday should not be able to
+widen a hole in the detector.
 
 ### D20 — control plane now does something · 2026-08-30
 `controlplane/policy/` compiles JSON definitions into frozen, content-addressed
@@ -496,3 +574,13 @@ It now fails to compile.
   field. D14 built with its limitation named in the API rather than hidden.
   Track A's P3 merged to main: 150 tests, three bugs found by end-to-end use
   that unit tests had masked.
+- **2026-08-30** — Phase 3 built (P6 decision tiers, P9 feedback loop).
+  **D26 and D24 resolved** — four of the brief's six solutioning areas are now
+  code rather than prose. D4 mitigated: session risk tracked from counters
+  only. Profile confidence thresholds differentiated so the three profiles
+  differ on the security axis, not only the quality axis. 249 tests.
+- **2026-08-30** — Phase 4 built (P10 metrics/canaries, P11 cost ledger).
+  **D25 and D7 resolved.** Five of the brief's six solutioning areas are now
+  code. Model prices carry an as-of date and are overridable; an unpriced
+  model raises rather than costing zero. Canary self-check test added after
+  the instrument reported a fault in itself. 296 tests.
