@@ -102,12 +102,55 @@ class RestoreResult:
     restored: int                # how many placeholders were put back
     unrestored: list[str]        # placeholders we could not resolve — D15 signal
 
+@dataclass
+class RequestScope:
+    assigned: dict[tuple[str, str], str]   # (category, value) -> placeholder
+    counters: dict[str, int]               # next index per category
+    mapping:  dict[str, str]               # cumulative for the whole request
+
 class SubstitutionEngine:
     def __init__(self, records_path: str, config: EngineConfig | None = None): ...
-    def scan_inbound(self, text: str) -> ScanResult: ...
+    def new_request_scope(self) -> RequestScope: ...
+    def scan_inbound(self, text: str, scope: RequestScope | None = None) -> ScanResult: ...
     def scan_outbound(self, text: str) -> ScanResult: ...
     def restore(self, text: str, mapping: dict[str, str]) -> RestoreResult: ...
 ```
+
+### RequestScope — amendment, agreed 2026-08-30
+
+**Pass one scope to every scan in a request.** A request is rarely one piece of
+text: a system prompt, several messages, sometimes several content parts each.
+Each is scanned separately, and without a shared scope every call restarts
+numbering at `A` — so two different customers in one request both come back as
+`[[CUST_A]]`. The provider is told they are the same person, and restoring the
+merged mapping puts the wrong name back. That is a wrong-customer leak produced
+by the component meant to prevent one.
+
+```python
+scope = engine.new_request_scope()
+for part in request_parts:
+    scanned = engine.scan_inbound(part.text, scope=scope)
+    send_upstream(scanned.text)
+answer = engine.restore(model_reply, scope.mapping)
+```
+
+- The scope also carries **identity**, not just numbering: Priya is
+  `[[CUST_A]]` in message 1 and message 7, so relational reasoning survives
+  across the conversation.
+- `ScanResult.mapping` is **cumulative for the scope**, so merging each result
+  as it arrives gives the same answer as reading `scope.mapping` at the end.
+  Both obvious usages are correct.
+- Omitting the scope is safe for a genuinely single-text request; it opens a
+  throwaway one. Existing single-call code is unaffected.
+- **Statelessness is unaffected** (IDEATION §3): the caller creates the scope
+  and drops it when the request ends. The engine keeps no reference and holds
+  no scopes of its own.
+
+*Why this is an engine change and not a caller workaround:* the alternative was
+for the gateway to concatenate the parts and scan once. That would make every
+`span` refer to a joined string that was never sent, breaking rule 4 below —
+so it would have worked around a gap in the contract by silently violating a
+different part of it.
 
 ### Rules that are not negotiable
 

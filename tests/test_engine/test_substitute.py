@@ -295,3 +295,119 @@ def test_findings_carry_no_raw_values(engine):
     blob = repr(result.findings)
     assert "Priya" not in blob
     assert "50100234567890" not in blob
+
+
+# --------------------------------------------------------------------------
+# Request scope - placeholder identity across the scans of one request
+# --------------------------------------------------------------------------
+
+def test_without_a_scope_two_customers_collide(engine):
+    """The bug Track B found at the seam, pinned so it cannot come back.
+
+    A request is rarely one piece of text - system prompt, several messages,
+    sometimes several content parts each - and every one gets scanned
+    separately. Per-call numbering meant two different customers in one
+    request both became [[CUST_A]]: the provider is told they are the same
+    person, and the merged mapping restores the wrong name.
+    """
+    a = engine.scan_inbound("First: Priya Sharma.")
+    b = engine.scan_inbound("Second: Rajesh Kumar.")
+    assert a.text == b.text.replace("Second", "First")   # both [[CUST_A]]
+
+    merged = {**a.mapping, **b.mapping}
+    assert engine.restore(a.text, merged).text == "First: Rajesh Kumar."
+    #                                                     ^ the wrong customer
+
+
+def test_a_scope_keeps_two_customers_distinct(engine):
+    scope = engine.new_request_scope()
+    a = engine.scan_inbound("First: Priya Sharma.", scope=scope)
+    b = engine.scan_inbound("Second: Rajesh Kumar.", scope=scope)
+
+    assert a.text != b.text
+    assert engine.restore(a.text, scope.mapping).text == "First: Priya Sharma."
+    assert engine.restore(b.text, scope.mapping).text == "Second: Rajesh Kumar."
+
+
+def test_the_same_person_keeps_one_placeholder_across_messages(engine):
+    """Identity, not just distinct numbering.
+
+    If Priya is [[CUST_A]] in message 1 and [[CUST_C]] in message 7, the model
+    can no longer tell it is one person and relational reasoning breaks across
+    the conversation - the same failure the within-call rule exists to prevent.
+    """
+    scope = engine.new_request_scope()
+    first = engine.scan_inbound("Priya Sharma called.", scope=scope)
+    engine.scan_inbound("Rajesh Kumar also called.", scope=scope)
+    later = engine.scan_inbound("Priya Sharma called back.", scope=scope)
+
+    assert first.text.split()[0] == later.text.split()[0]
+    assert len(scope.mapping) == 2
+
+
+def test_scan_result_mapping_is_cumulative(engine):
+    """A caller who naively merges each result gets the right answer too.
+
+    Two obvious usages - merge every ScanResult.mapping, or read scope.mapping
+    at the end - must not disagree. Designing so the lazy path is also correct
+    is cheaper than documenting the difference.
+    """
+    scope = engine.new_request_scope()
+    engine.scan_inbound("Priya Sharma.", scope=scope)
+    second = engine.scan_inbound("Rajesh Kumar.", scope=scope)
+    assert second.mapping == scope.mapping
+
+
+def test_spans_still_index_each_original_text(engine):
+    """Why this belongs in the engine rather than a join on the caller's side.
+
+    CONTRACTS section 3 rule 4: spans refer to the ORIGINAL text, because the
+    audit entry needs those offsets. Concatenating messages to share numbering
+    would make every span point into a joined string that was never sent.
+    """
+    scope = engine.new_request_scope()
+    texts = ["Refund Priya Sharma today.", "Also refund Rajesh Kumar."]
+    for text in texts:
+        result = engine.scan_inbound(text, scope=scope)
+        for finding in result.findings:
+            assert text[slice(*finding.span)] in ("Priya Sharma", "Rajesh Kumar")
+
+
+def test_scope_is_caller_owned_and_the_engine_holds_none(engine):
+    """Statelessness (IDEATION section 3) survives the fix.
+
+    The scope is a value the caller passes in and drops. If the engine kept
+    scopes of its own, we would have quietly built the per-request memory the
+    whole positioning forbids.
+    """
+    scope = engine.new_request_scope()
+    engine.scan_inbound("Priya Sharma.", scope=scope)
+
+    blob = repr(engine.__dict__)
+    assert "Priya" not in blob
+    assert not any("scope" in k.lower() for k in engine.__dict__)
+
+    fresh = engine.new_request_scope()
+    assert fresh.mapping == {} and fresh is not scope
+
+
+def test_scope_survives_an_empty_and_a_clean_text(engine):
+    scope = engine.new_request_scope()
+    engine.scan_inbound("Priya Sharma.", scope=scope)
+    assert engine.scan_inbound("", scope=scope).mapping == scope.mapping
+    assert engine.scan_inbound("Nothing sensitive here.", scope=scope).mapping == scope.mapping
+    assert len(scope.mapping) == 1
+
+
+def test_blocked_scan_does_not_corrupt_the_scope(engine):
+    scope = engine.new_request_scope()
+    engine.scan_inbound("Priya Sharma.", scope=scope)
+    blocked = engine.scan_inbound("key sk-abcdefghij0123456789ABCDEFGHIJ", scope=scope)
+    assert blocked.blocked
+    assert scope.mapping == {"[[CUST_A]]": "Priya Sharma"}
+
+
+def test_omitting_the_scope_still_works_for_a_single_text(engine):
+    """Backwards compatible - a genuinely single-text request needs no scope."""
+    result = engine.scan_inbound("Refund Priya Sharma.")
+    assert result.mapping and engine.restore(result.text, result.mapping).unrestored == []

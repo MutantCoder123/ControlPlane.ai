@@ -34,6 +34,7 @@ from dataclasses import dataclass
 from controlplane.engine.api import (
     EngineConfig,
     Finding,
+    RequestScope,
     RestoreResult,
     ScanResult,
 )
@@ -69,8 +70,24 @@ class SubstitutionEngine:
 
     # -- inbound -----------------------------------------------------------
 
-    def scan_inbound(self, text: str) -> ScanResult:
+    @staticmethod
+    def new_request_scope() -> RequestScope:
+        """Open a scope for one request. Pass it to every scan in that request.
+
+        The caller owns it and drops it when the request ends; the engine keeps
+        no reference, so statelessness is unaffected (IDEATION section 3).
+        """
+        return RequestScope()
+
+    def scan_inbound(self, text: str, scope: RequestScope | None = None) -> ScanResult:
         """Make `text` safe to send upstream.
+
+        Pass the same `scope` to every scan in one request. Without it each
+        call starts numbering at A, so two customers in one request both become
+        [[CUST_A]] - the provider is told they are the same person, and
+        restoring the merged mapping puts the wrong name back. Omitting the
+        scope is safe for a genuinely single-text request; it just opens a
+        throwaway one.
 
         Never raises. A malformed prompt comes back as blocked, because the
         gateway sits on the request path and must be able to trust that
@@ -79,7 +96,7 @@ class SubstitutionEngine:
         app beats a leak.
         """
         try:
-            return self._scan_inbound(text)
+            return self._scan_inbound(text, scope if scope is not None else RequestScope())
         except Exception as exc:  # pragma: no cover - defensive by design
             return ScanResult(
                 text="",
@@ -87,18 +104,20 @@ class SubstitutionEngine:
                 block_reason=f"scanner error, failing closed: {type(exc).__name__}: {exc}",
             )
 
-    def _scan_inbound(self, text: str) -> ScanResult:
+    def _scan_inbound(self, text: str, scope: RequestScope) -> ScanResult:
         if not isinstance(text, str):
             return ScanResult(text="", blocked=True, block_reason="prompt is not text")
         if not text:
-            return ScanResult(text="")
+            return ScanResult(text="", mapping=dict(scope.mapping))
 
         candidates = self._reconcile(self._candidates(text))
 
         findings: list[Finding] = []
-        mapping: dict[str, str] = {}
-        assigned: dict[tuple[str, str], str] = {}
-        counters: dict[str, int] = {}
+        # Identity and numbering live on the scope, so they carry across every
+        # scan in the request rather than resetting per call.
+        assigned = scope.assigned
+        counters = scope.counters
+        mapping = scope.mapping
         blocked_reasons: list[str] = []
         out = text
 
@@ -156,16 +175,24 @@ class SubstitutionEngine:
 
         findings.sort(key=lambda f: f.span[0])
 
-        # Replacement runs right to left so spans stay valid, which leaves the
-        # mapping in reverse text order. Re-emit it left to right: a consumer
-        # reasonably expects `next(iter(mapping))` to be the first entity in
-        # the prompt, and quietly getting the last one is the kind of surprise
-        # that produces a wrong-looking demo.
+        # Replacement runs right to left so spans stay valid, which leaves this
+        # call's entries in reverse text order. Re-emit them left to right: a
+        # consumer reasonably expects `next(iter(mapping))` to be the first
+        # entity in the prompt, and quietly getting the last one is the kind of
+        # surprise that produces a wrong-looking demo.
+        #
+        # The result is CUMULATIVE for the scope - it carries entries from
+        # earlier scans too. That is deliberate: a caller who merges each
+        # ScanResult.mapping as it arrives gets exactly the same answer as one
+        # who uses scope.mapping at the end. The obvious thing and the correct
+        # thing agree.
         ordered = {
             f.placeholder: mapping[f.placeholder]
             for f in findings
             if f.placeholder and f.placeholder in mapping
         }
+        for placeholder, original in mapping.items():
+            ordered.setdefault(placeholder, original)
 
         blocked = bool(blocked_reasons)
         return ScanResult(

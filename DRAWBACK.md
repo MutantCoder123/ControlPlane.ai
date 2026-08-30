@@ -618,3 +618,15 @@ It now fails to compile.
   building: mid-band confidence escalates *irreversible* harm only — sending
   every uncertain hallucination flag to a human is how the review queue
   becomes noise. 346 tests.
+- **2026-08-30** — Track B found a placeholder-numbering collision at the
+  integration seam: `scan_inbound` numbered per call, so two customers in one
+  multi-part request both became `[[CUST_A]]` and the merged mapping restored
+  the wrong name. Fixed in the engine via `RequestScope` rather than by having
+  the gateway concatenate parts — concatenation would have made every `span`
+  point into a joined string that was never sent, breaking CONTRACTS §3 rule 4
+  to work around a §3 gap. CONTRACTS §3 amended by agreement. 355 tests.
+
+  *Third wrong-customer bug in this codebase, and the third found by using the
+  thing rather than reading it.* The pattern is worth naming in the pitch: the
+  restore path is where this product fails, and every one of them was invisible
+  to a unit test that exercised a single call.
