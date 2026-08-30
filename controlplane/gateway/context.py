@@ -36,7 +36,10 @@ class RequestContext:
     """Per-request contextual metadata throughout the gateway pipeline."""
 
     request_id: str = field(default_factory=lambda: f"req-{uuid.uuid4().hex[:12]}")
-    api_key: str | None = None
+    # repr=False: this is a dataclass, so it prints every field by default,
+    # and one logger.info("ctx=%s", ctx) downstream would put the caller's
+    # credential in a log file. CONTRACTS.md section 3 rule 3.
+    api_key: str | None = field(default=None, repr=False)
     team: str = "default"
     profile: str = "internal-knowledge"
     start_time: float = field(default_factory=time.time)

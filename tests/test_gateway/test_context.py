@@ -28,3 +28,18 @@ def test_team_and_auth_extraction():
     )
     assert ctx.api_key == "sk-test-team-key-12345"
     assert ctx.request_id == "custom-req-001"
+
+
+def test_api_key_never_appears_in_the_repr():
+    """CONTRACTS.md section 3 rule 3: raw secrets stay out of logs.
+
+    RequestContext is a dataclass, so it prints every field by default - and
+    the caller's API key is one of them. One `logger.info("ctx=%s", ctx)`
+    anywhere downstream and the credential is in the log file, which is the
+    concentration risk we sell protection from.
+    """
+    ctx = RequestContext(api_key="sk-proj-1234567890abcdef1234567890abcdef")
+
+    assert "sk-proj-1234567890abcdef1234567890abcdef" not in repr(ctx)
+    # Still readable through the attribute - it is hidden, not removed.
+    assert ctx.api_key == "sk-proj-1234567890abcdef1234567890abcdef"
