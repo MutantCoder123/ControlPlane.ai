@@ -254,3 +254,24 @@ def test_public_facing_blocks_on_evidence_that_only_reviews_internally(engine, b
 def test_thresholds_actually_differ_across_profiles(bundle):
     thresholds = {n: bundle.get(n).decision.block_at for n in bundle.names}
     assert len(set(thresholds.values())) == 3, thresholds
+
+
+def test_mid_band_does_not_escalate_reversible_harm(engine, bundle):
+    """Escalating the middle is the honest use of a reviewer only where the
+    harm cannot be undone.
+
+    For a reversible finding we can show the reader the evidence and let them
+    judge - cheaper, adds no safety a human would have added, and keeps the
+    review queue for decisions that actually need one. Sending every uncertain
+    hallucination flag to a person is how the queue becomes noise, which is
+    the alert fatigue the brief warns about arriving by a different door.
+    """
+    mid = 0.65
+    low, high = bundle.get("internal-knowledge").decision.review_band
+    assert low <= mid < high
+
+    rev = Signal("hallucination", "quality", mid, reversible=True, evidence="check 30/45/60")
+    irr = Signal("customer_name", "known_value", mid, reversible=False)
+
+    assert engine.decide([rev], bundle.get("internal-knowledge")).tier is Tier.ANNOTATE
+    assert engine.decide([irr], bundle.get("internal-knowledge")).tier is Tier.REVIEW

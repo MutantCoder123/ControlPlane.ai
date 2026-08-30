@@ -23,9 +23,11 @@ Portion 1 owners:
 | `controlplane/feedback/**` | **A** | Added 2026-08-30 (P9). New lane |
 | `controlplane/cost/**` | **A** | Added 2026-08-30 (P11). New lane |
 | `controlplane/metrics/**` | **A** | Added 2026-08-30 (P10). New lane |
+| `controlplane/stream/**` | **A** | Added 2026-08-30 (P4). New lane |
+| `controlplane/quality/**` | **A** | Added 2026-08-30 (P7). New lane |
 | `controlplane/gateway/**` | **B** | A never edits |
 | `controlplane/seed/**` | **B** | A consumes the *data*, never edits the generator |
-| `tests/test_engine/**`, `tests/test_policy/**`, `tests/test_audit/**`, `tests/test_decision/**`, `tests/test_feedback/**`, `tests/test_cost/**`, `tests/test_metrics/**` | **A** | |
+| `tests/test_engine/**`, `tests/test_policy/**`, `tests/test_audit/**`, `tests/test_decision/**`, `tests/test_feedback/**`, `tests/test_cost/**`, `tests/test_metrics/**`, `tests/test_stream/**`, `tests/test_quality/**` | **A** | |
 | `tests/test_gateway/**` | **B** | |
 | `CONTRACTS.md` | **both** | Only by agreement. Announce before editing |
 | `README.md` | **B** | A supplies the engine section when asked |
@@ -195,7 +197,15 @@ from controlplane.decision.tiers import DecisionEngine, signals_from_findings
 from controlplane.feedback.session import SessionRiskTracker
 from controlplane.cost.ledger import CostLedger, BudgetExceeded
 from controlplane.metrics.registry import MetricsRegistry
+from controlplane.stream.buffer import CommitPointBuffer
 ```
+
+**For the gateway's streaming path:** wrap the upstream SSE iterator in a
+`CommitPointBuffer(profile, engine.scan_outbound, restore=engine.restore,
+mapping=scanned.mapping)`. Call `.feed(chunk)` per chunk and `.flush()` at
+the end; each returns a list of `Release` objects to write to the client. A
+`Release` with `.blocked` means stop the stream. This replaces the
+"stream straight through" seam in TRACK-B.md.
 
 `DecisionEngine.decide(signals, profile)` returns a `Decision` whose `.tier` is
 one of `allow` / `annotate` / `review` / `block`, and whose `.audit_payload()`

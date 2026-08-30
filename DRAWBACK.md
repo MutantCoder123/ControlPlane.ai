@@ -135,14 +135,15 @@ The failure mode of a gatekeeper is degraded; the failure mode of a memory
 store is catastrophic.
 
 ### D5 — The commit-point buffer costs one sentence of TTFB
-⚪ `accepted`
+⚪ `accepted` · built 2026-08-30, and now measured rather than asserted —
+`BufferStats.ttfb_ms` records the real figure per stream.
 
 Real cost, well covered by the reader-vs-model argument (§7): a person reads
 ~4 words/sec, a model emits ~50, so the buffer is permanently ahead of the eye
 after the first pause.
 
 ### D6 — …but that argument only holds where a human reads a stream
-🟡 `mitigated` 2026-08-30 — `streaming.mode` is now a per-profile field
+✅ `resolved` 2026-08-30 — `streaming.mode` is now a per-profile field
 (`interactive` | `throughput`), validated at compile time. The stance below is
 enforced by the policy compiler rather than asserted in prose. P4 consumes it.
 
@@ -196,7 +197,11 @@ Catches structured secrets deterministically. Catches unstructured PII not at
 all unless it is in the known-value store.
 
 ### D11 — Consistency sampling fails exactly where the model fails systematically
-🟠 `open`
+🟡 `accepted` 2026-08-30 — acted on by NOT building it. `consistency_sample()`
+exists as a labelled stub whose docstring states the reason: shipping it would
+let us claim a check that is blind precisely where models fail systematically.
+Deciding not to build something, and saying why in the code, is the honest
+form of this entry.
 
 The trap named in §11.4: sampling detects *random* fabrication. Invented
 citations, arithmetic errors and reversed relations reproduce identically every
@@ -405,7 +410,11 @@ policy-exception requests, and on novel patterns.
 honest use of a reviewer. The extremes are exactly where automation works.
 
 ### D27 — Bias, hallucination and privacy overlap; our detector handles it worse than our architecture does
-🟠 `mitigated` · **answer, don't build**
+✅ `resolved` 2026-08-30 — the detector gap is closed, unexpectedly, by the
+hallucination check. A fabricated name is not in the known-value store, but it
+has no provenance in the question or the sources either, so
+`entity_not_in_source` surfaces it. The architecture answered the overlap; the
+async check turned out to answer the detector half too.
 
 The brief: "a fabricated detail about a person can simultaneously be a
 hallucination and a privacy concern."
@@ -464,6 +473,24 @@ State plainly that full multi-turn analysis is out of prototype scope.
 ---
 
 ## Resolved
+
+### D6 — buffering is a profile property, in code · 2026-08-30
+`controlplane/stream/buffer.py` reads `streaming.mode` from the compiled
+profile. Interactive routes buffer to commit points; throughput routes scan
+once at flush, because a batch job has no reader to be ahead of. Both still
+block credentials — batch is not exempt from irreversible-harm checks.
+
+*Improved on the design while building it:* §7 proposes a 50-char overlap
+window when scanning, so a secret split across two commits is caught. But
+detection arrives after the first half is already released, and released is
+released. We hold the boundary region back instead of re-scanning it later —
+same window, one commit later, airtight rather than merely observant. Tested
+at chunk sizes from 1 to 40 characters.
+
+### D27 — the detector gap closed itself · 2026-08-30
+See the D27 entry above. `entity_not_in_source` catches fabricated people for
+the same reason it catches fabricated figures: no provenance. We expected to
+concede this one on stage and can now demonstrate it instead.
 
 ### D25 — we can now measure being wrong, honestly · 2026-08-30
 `controlplane/metrics/`. The asymmetry is built into the API rather than
@@ -584,3 +611,10 @@ It now fails to compile.
   code. Model prices carry an as-of date and are overridable; an unpriced
   model raises rather than costing zero. Canary self-check test added after
   the instrument reported a fault in itself. 296 tests.
+- **2026-08-30** — Phase 5 built (P4 commit-point buffer, P7 quality checks).
+  **D6 and D27 resolved**; D5 now measured; D11 acted on by deliberately not
+  building consistency sampling and saying why in the code. All six of the
+  brief's solutioning areas are now implemented. Refined the tier rule while
+  building: mid-band confidence escalates *irreversible* harm only — sending
+  every uncertain hallucination flag to a human is how the review queue
+  becomes noise. 346 tests.

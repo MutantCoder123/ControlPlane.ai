@@ -264,10 +264,14 @@ class DecisionEngine:
             # which is the one case where the number cannot be trusted.
             return Tier.REVIEW, NOVEL_PATTERN
 
-        if low <= signal.confidence < high:
-            return Tier.REVIEW, MID_BAND
-
-        if signal.confidence >= high:
+        # NOTE: mid-band confidence does NOT escalate reversible harm.
+        # Escalating the middle is the honest use of a reviewer only where the
+        # harm cannot be undone. For a reversible finding we can simply show
+        # the reader the evidence and let them judge - which is cheaper, adds
+        # no safety a human would have added, and keeps the review queue for
+        # decisions that actually need one. Sending every uncertain
+        # hallucination flag to a person is how the queue becomes noise.
+        if signal.confidence >= low:
             if signal.evidence:
                 return Tier.ANNOTATE, "reversible harm, evidence available"
             # No flag without something actionable. "Possible issue" IS the
