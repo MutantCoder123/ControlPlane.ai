@@ -11,7 +11,7 @@ from controlplane.gateway.context import RequestContext, create_request_context
 def test_profile_defaults_and_header_override():
     # 1. Default profile
     ctx_default = create_request_context(headers={})
-    assert ctx_default.profile == "internal-assistant"
+    assert ctx_default.profile == "internal-knowledge"
     assert ctx_default.team == "default"
 
     # 2. Header override

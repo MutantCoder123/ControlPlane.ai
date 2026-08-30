@@ -2,9 +2,19 @@
 
 Carries request id, key -> team, profile name, timings, token counts, findings.
 
-Portion 1: `profile` is a PASSTHROUGH LABEL ONLY. The compiled policy
-artefact, hot-swap and per-profile check selection land in P2 - see
-BUILD-PLAN.md. Do not build the profile engine here.
+`profile` is still a PASSTHROUGH LABEL here, but the names are no longer
+arbitrary: the policy engine landed while this file was offline, and the three
+profiles it compiles are customer-support, internal-knowledge and
+decision-support (controlplane/policy/profiles/). The default below matches one
+of them, because PolicyStore.profile_for() raises PolicyError on an unknown
+name rather than falling back to something permissive - so a stale name like
+the old "internal-assistant" would fail closed the moment it is wired.
+
+NOT WIRED YET: resolving this string through PolicyStore, so the profile
+actually selects checks and buffering. That changes request semantics (an
+unknown profile has to become an HTTP error) and belongs with the decision
+engine, not with the spine.
+# not implemented in Portion 1 - see CONTRACTS.md section 6a and BUILD-PLAN.md P2
 """
 
 from __future__ import annotations
@@ -16,9 +26,9 @@ from typing import Any
 
 from controlplane.engine.api import Finding
 
-# Portion 1: profile is a passthrough label only.
-# The compiled policy artefact + hot-swap lands in P2 — see BUILD-PLAN.md.
-# not implemented in Portion 1 — see BUILD-PLAN.md P2
+# profile is a passthrough label; PolicyStore resolution is not wired yet.
+# The valid names are the three in controlplane/policy/profiles/.
+# not implemented in Portion 1 — see CONTRACTS.md section 6a
 
 
 @dataclass
@@ -28,7 +38,7 @@ class RequestContext:
     request_id: str = field(default_factory=lambda: f"req-{uuid.uuid4().hex[:12]}")
     api_key: str | None = None
     team: str = "default"
-    profile: str = "internal-assistant"
+    profile: str = "internal-knowledge"
     start_time: float = field(default_factory=time.time)
     timings: dict[str, float] = field(default_factory=dict)
     token_counts: dict[str, int] = field(default_factory=dict)
@@ -42,7 +52,7 @@ class RequestContext:
 def create_request_context(
     headers: dict[str, str] | None = None,
     api_key: str | None = None,
-    default_profile: str = "internal-assistant",
+    default_profile: str = "internal-knowledge",
 ) -> RequestContext:
     """Factory creating RequestContext from HTTP headers and auth information."""
     headers = headers or {}

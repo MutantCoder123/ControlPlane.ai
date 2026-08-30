@@ -13,7 +13,7 @@ def test_mix_within_tolerance():
     traffic = generate_synthetic_traffic(total_samples=total, seed=42)
     assert len(traffic) == total
 
-    internal_count = sum(1 for t in traffic if t["profile"] == "internal-assistant")
+    internal_count = sum(1 for t in traffic if t["profile"] == "internal-knowledge")
     customer_count = sum(1 for t in traffic if t["profile"] == "customer-support")
     decision_count = sum(1 for t in traffic if t["profile"] == "decision-support")
 
@@ -31,7 +31,7 @@ def test_traffic_entries_valid():
     traffic = generate_synthetic_traffic(total_samples=50, seed=42)
     for entry in traffic:
         assert "request_id" in entry
-        assert entry["profile"] in ("internal-assistant", "customer-support", "decision-support")
+        assert entry["profile"] in ("internal-knowledge", "customer-support", "decision-support")
         assert "team" in entry
         assert "messages" in entry
         assert len(entry["messages"]) > 0

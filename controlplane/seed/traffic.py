@@ -59,7 +59,7 @@ def generate_synthetic_traffic(
     """Generate synthetic request traffic adhering to the 60/30/10 profile mix."""
     rng = random.Random(seed)
 
-    # 60% internal-assistant, 30% customer-support, 10% decision-support
+    # 60% internal-knowledge, 30% customer-support, 10% decision-support
     num_internal = int(total_samples * 0.60)
     num_customer = int(total_samples * 0.30)
     num_decision = total_samples - num_internal - num_customer
@@ -83,7 +83,7 @@ def generate_synthetic_traffic(
             emp_id="EMP-1001",
             salary="85000",
         )
-        traffic.append(make_entry(f"req-int-{i:05d}", "internal-assistant", prompt, "engineering"))
+        traffic.append(make_entry(f"req-int-{i:05d}", "internal-knowledge", prompt, "engineering"))
 
     # Customer support
     for i in range(num_customer):
