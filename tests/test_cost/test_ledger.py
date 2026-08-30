@@ -119,7 +119,14 @@ def test_team_budget_tracks_cumulative_spend():
 
 
 def test_a_team_without_a_budget_is_unlimited(ledger):
-    ledger.check_budget(team="nobody-set-a-cap", estimate=99.0)
+    """No cap configured means no refusal - proven by the absence of a raise.
+
+    Written with an explicit `does not raise` rather than a bare call: a test
+    body with no assert reads as one that cannot fail, and a reader should not
+    have to work out that `check_budget` raising IS the failure mode.
+    """
+    ledger.check_budget(team="nobody-set-a-cap", estimate=99.0)  # must not raise
+    assert ledger.spend_for_team("nobody-set-a-cap") == 0.0
 
 
 # --------------------------------------------------------------------------

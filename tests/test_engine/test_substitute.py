@@ -65,6 +65,37 @@ def test_mapping_is_in_text_order(engine):
     assert scanned.mapping[first] == "Priya Sharma"
 
 
+def test_round_trip_against_a_reply_not_derived_from_the_scan(engine):
+    """The same claim as the test above, but this one can actually fail.
+
+    Track B pointed out that a round-trip test which builds the model reply
+    out of the placeholders it just received passes by construction - it
+    proves `restore` can undo something we handed it, not that the round trip
+    survives a reply we did not write.
+
+    So: pin what the provider saw, then hand-write the reply the way a model
+    actually answers - possessive, reordered, one placeholder used twice. If
+    the placeholder format changes, the first assertion fails loudly, which is
+    correct: the format is a contract surface (CONTRACTS section 4).
+    """
+    prompt = "Draft a refund email to Priya Sharma at priya.sharma@example.com."
+    scanned = engine.scan_inbound(prompt)
+
+    assert scanned.text == "Draft a refund email to [[CUST_A]] at [[EMAIL_A]]."
+
+    model_reply = (
+        "Hi [[CUST_A]], I have emailed confirmation to [[EMAIL_A]]. "
+        "[[CUST_A]]'s refund of 45230 clears in 3 days."
+    )
+    restored = engine.restore(model_reply, scanned.mapping)
+
+    assert restored.text == (
+        "Hi Priya Sharma, I have emailed confirmation to "
+        "priya.sharma@example.com. Priya Sharma's refund of 45230 clears in 3 days."
+    )
+    assert restored.unrestored == []
+
+
 def test_same_entity_gets_the_same_placeholder(engine):
     """Relational reasoning has to survive substitution."""
     result = engine.scan_inbound(

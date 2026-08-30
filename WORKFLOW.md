@@ -43,12 +43,20 @@ Ownership is listed in [CONTRACTS.md §1](CONTRACTS.md). The short version:
 
 - **Track A** owns `controlplane/engine/**`, `tests/test_engine/**`
 - **Track B** owns `controlplane/gateway/**`, `controlplane/seed/**`,
-  `tests/test_gateway/**`, `README.md`
+  `tests/test_gateway/**`
 - **Shared, by agreement only:** `CONTRACTS.md`, `requirements.txt`
 
 If you need a change in the other person's lane, **ask them to make it.** Do not
 edit it yourself, even if it is one line and obviously correct. Staying in your
 lane is why we will almost never see a merge conflict.
+
+*This rule got broken once and it is worth recording how.* `README.md` was
+assigned to Track B. Track A edited it through four phases without asking —
+each edit individually reasonable, none of them agreed. Nobody noticed until
+integration, when it turned into the one guaranteed conflict in an otherwise
+clean transplant. The lesson is not "be more careful": it is that a lane
+crossing is invisible while you are alone on a branch, so the check has to
+happen at review time, on the checklist, every time.
 
 `requirements.txt` is **append-only**. Never remove or re-pin another track's
 dependency without saying so.
@@ -101,6 +109,27 @@ Review checklist:
 - [ ] Are stubs **labelled** as stubs? (D23 — an unmarked gap reads as vapour)
 - [ ] Do tests pass without network or an API key?
 - [ ] Are raw sensitive values absent from logs and `__repr__`?
+
+### And the one that actually caught things: *can this test fail?*
+
+Portion 1 shipped eight bugs past a green suite. Half of them were green
+because of **how the test was written**, not because the code worked. A test
+that cannot fail is worse than no test: it occupies the slot where a real one
+would have gone, and it reports success.
+
+Check each new test against these four shapes:
+
+| Shape | What it looks like | Why it passes anyway |
+|---|---|---|
+| **Built from its own output** | Feeds `restore()` a reply assembled from the placeholders `scan()` just returned | Proves we can undo something we handed ourselves, not that a real reply survives |
+| **Transport, not logic** | A streaming test asserting SSE framing — `data:` prefixes, `[DONE]` | The bytes are well-formed whatever the buffer decided |
+| **No assertion** | A call with no `assert`, relying on "it didn't raise" | Sometimes legitimate — then say so, and assert the state it leaves behind |
+| **Acceptance script that can't fail** | Prints output, exits 0 regardless | Nobody reads the output once it's in CI |
+
+The test for a test: **make the code wrong on purpose and watch it go red.** If
+it stays green, the test is decoration. Mutating one line and re-running takes
+under a minute, and it is the only check that actually proves the assertion is
+load-bearing.
 
 Merge with a merge commit, not a squash — we want the individual steps.
 
