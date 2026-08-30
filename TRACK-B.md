@@ -1,9 +1,9 @@
 # TRACK B — Gateway Spine + Seed Data (P1 + P13)
 
-**You own:** `controlplane/gateway/**`, `controlplane/seed/**`, `tests/test_gateway/**`, `README.md`
+**You own:** `controlplane/gateway/**`, `controlplane/seed/**`, `tests/test_gateway/**`
 **Your partner is on:** [TRACK-A.md](TRACK-A.md) — the substitution engine
 **Shared interface:** [CONTRACTS.md](CONTRACTS.md) — read it first
-**Design background:** IDEATION.md §1, §4, §8 · Drawbacks D28, D3, D2, D23
+**Design background:** IDEATION.md §1, §4, §8 · Drawbacks D28, D3, D2, D23a
 
 ---
 
@@ -162,18 +162,27 @@ terminal.
 
 ---
 
-## Part 3 — README.md (yours to own)
+## Part 3 — labelling your stubs (D23a)
 
-Round 2 requires a public repo with a README documenting approach and
-architecture. **D23 is your drawback:** on a public repo, anything the README
-claims that the code does not contain reads as vapour to a reviewer who opens
-it.
+> **Reassigned 2026-08-30.** This section used to hand you the whole README.
+> Ownership of `README.md` moved to Track A, which had been editing it for four
+> phases without asking — see CONTRACTS §1 and WORKFLOW §2. What stays yours is
+> the half that lives in your own code.
 
-So: stubs are fine, **unmarked stubs are not.** Every part we have not built yet
-gets a line saying so, in the README and in the code, in the same words. An
-honest `# not implemented in Portion 1 — see BUILD-PLAN.md P8` scores better
-than an empty function where a feature was promised. Costs an hour, removes a
-whole class of reviewer suspicion.
+**D23 split into two halves.** On a public repo, anything the README claims
+that the code does not contain reads as vapour to a reviewer who opens it. That
+cuts both ways, and the two halves have different owners:
+
+- **D23a — yours.** Every unbuilt thing in `gateway/` and `seed/` carries a
+  label saying so, in the code, in the same words the docs use. An honest
+  `# not implemented in Portion 1 — see BUILD-PLAN.md P8` scores better than an
+  empty function where a feature was promised.
+- **D23b — Track A's.** The same discipline in `README.md` and the design docs:
+  the status table must match what the code actually does.
+
+Costs an hour each, removes a whole class of reviewer suspicion.
+
+When Track A writes the README's gateway section, they will ask you for it.
 
 Include: what it is, the one-line integration claim, how to run it, the
 architecture sketch, and an explicit **"not built yet"** section pointing at

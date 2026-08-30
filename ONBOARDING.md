@@ -175,7 +175,7 @@ Every part of this project carries named weaknesses. Yours:
 
 | ID | What | What you do about it |
 |---|---|---|
-| **D23** | A public repo makes unmarked stubs a liability | Label every gap in code *and* README, same words. You own the README |
+| **D23a** | Unmarked stubs are a liability on a public repo | Label every gap in `gateway/`/`seed/` code, in the same words the docs use. (README labelling is D23b, Track A's — reassigned 2026-08-30) |
 | **D28** | "Loosely governed sources" undercut our inherit-their-classification story | The governed/ungoverned split in your seed data is the answer |
 | **D2** | Embeddings bypass a chat-completions proxy | Add `/v1/embeddings`. ~1 hour, and it covers the largest bulk egress in a RAG rollout |
 | **D3** | "One line" is not literal for Bedrock/Azure | Build the OpenAI-compatible path; say so honestly in the README. Do not overclaim |
