@@ -227,6 +227,82 @@ def test_engine_findings_are_irreversible(engine, bundle):
     assert "customer:44219" in signals[0].evidence
 
 
+# --------------------------------------------------------------------------
+# Mitigation - substitution neutralises the harm before the tier is decided
+# --------------------------------------------------------------------------
+
+def _scan(text):
+    from pathlib import Path
+
+    from controlplane.engine.substitute import SubstitutionEngine
+
+    fixture = str(Path(__file__).parents[1] / "test_engine" / "fixtures" / "records.jsonl")
+    return SubstitutionEngine(fixture).scan_inbound(text)
+
+
+def test_a_substituted_name_does_not_block_the_request(engine, bundle):
+    """The bug that would have blocked every useful prompt in the demo.
+
+    A known-value name matches at confidence 1.0, which clears `block_at`.
+    Without `mitigated`, pasting a customer record - the ONE thing this
+    product exists to make safe - refuses the request.
+    """
+    scanned = _scan("Draft a refund note for Priya Sharma; her balance is 45230.")
+    assert "[[" in scanned.text and "Priya" not in scanned.text
+
+    d = engine.decide(signals_from_findings(scanned.findings), bundle.get("internal-knowledge"))
+    assert d.tier is Tier.ALLOW
+    assert not d.blocked
+    assert all(o.reason == "mitigated by substitution" for o in d.outcomes)
+
+
+def test_a_substituted_card_does_not_block_either(engine, bundle):
+    """Every category, not the handful someone remembered to list.
+
+    The earlier attempt at this fix used a per-profile exemption list, which
+    covered customer_name and email and silently left payment_card blocking.
+    Mitigation is a property of what the engine DID, so it cannot be missed
+    off a list.
+    """
+    scanned = _scan("Charge Meera Nair card 4539578763621486.")
+    assert "[[CARD_A]]" in scanned.text
+
+    d = engine.decide(signals_from_findings(scanned.findings), bundle.get("internal-knowledge"))
+    assert d.tier is Tier.ALLOW
+
+
+def test_a_credential_still_blocks(engine, bundle):
+    """The guard on the fix above. Mitigation must not become a bypass.
+
+    A credential has no safe substituted form, so the engine marks it
+    action="block" and it must survive the mitigation branch untouched.
+    """
+    scanned = _scan("Use key sk-abcdefghij0123456789ABCDEFGHIJ to call it.")
+    signals = signals_from_findings(scanned.findings)
+    assert signals and not signals[0].mitigated
+
+    d = engine.decide(signals, bundle.get("internal-knowledge"))
+    assert d.tier is Tier.BLOCK
+
+
+def test_a_mitigated_finding_still_reaches_the_audit_line(engine, bundle):
+    """Allowed is not the same as unrecorded.
+
+    "We substituted three identifiers and let it through" is the sentence the
+    audit log has to be able to produce. Dropping mitigated findings entirely
+    would have been the easy fix and it would have made the log say nothing
+    happened.
+    """
+    scanned = _scan("Email Priya Sharma at priya.sharma@example.com.")
+    d = engine.decide(signals_from_findings(scanned.findings), bundle.get("internal-knowledge"))
+
+    payload = d.audit_payload()
+    assert payload["tier"] == "allow"
+    assert len(payload["signals"]) == 2
+    assert {s["record_ref"] for s in payload["signals"]} == {"customer:44219"}
+    assert "Priya" not in repr(payload)
+
+
 def test_audit_payload_carries_references_not_values(engine, bundle):
     d = engine.decide([irreversible(1.0, record_ref="customer:44219")], bundle.get("internal-knowledge"))
     payload = d.audit_payload()

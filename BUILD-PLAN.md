@@ -9,7 +9,7 @@ Companions: [IDEATION.md](IDEATION.md) (what and why) ·
 [DRAWBACK.md](DRAWBACK.md) (what is weak) ·
 [Implementation.md](Implementation.md) (approach trade-offs per technique).
 
-Last updated: 2026-08-29.
+Last updated: 2026-08-30.
 
 ---
 
@@ -28,9 +28,9 @@ Last updated: 2026-08-29.
 | **P9** | Feedback loop | M | P6 P8 | ✅ **done** | **D24**, D4 |
 | **P10** | Metrics & canaries | M | P8 P13 | ✅ **done** | **D25**, D7 |
 | **P11** | Cost ledger | M | — | ✅ **done** | D7 |
-| **P12** | Dashboard | L | P8–P11 | **build** | — |
+| **P12** | Dashboard | L | P8–P11 | ✅ **done** | D17 ~, D18 ~ |
 | **P13** | Traffic simulator + seed data | S | *none* | 🔨 Track B | D28 |
-| **P14** | Repo, README, demo cut | M | all | **build** | **D22**, **D23** |
+| **P14** | Repo, README, demo cut | M | all | 🔨 in progress | **D22**, **D23a/b** |
 
 **Three parts have no dependencies and can start immediately:** P3, P8, P13.
 That is the natural split if more than one person is building.
@@ -51,7 +51,7 @@ phases, one at a time, with Track B (P1, P13) landing independently.
 | **3. Decision & Feedback** | P6, P9 | **D26** ✅, **D24** ✅, D4 | ✅ **done** |
 | **4. Measurement & Cost** | P10, P11 | **D25** ✅, D7 ✅ | ✅ **done** |
 | **5. Stream & Quality** | P4, P7 | D6 ✅, D27 ✅, D5, D11, D12 | ✅ **done** |
-| 6. Surface & Delivery | P12, P14 | **D22**, **D23**, D17, D18 | next |
+| **6. Surface & Delivery** | P12, P14 | D17 ~, D18 ~, **D22** 🔨, **D23a/b** 🔨 | 🔨 **P12 done, P14 in progress** |
 
 P5 (pre-flight gate) is orchestration over Track B's gateway and lands with
 integration rather than in a phase of its own.

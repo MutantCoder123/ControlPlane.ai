@@ -13,9 +13,10 @@ one line — its `base_url` — and nothing else.
 
 ## Status — Portion 1 in progress
 
-> **This README is owned by Track B and is deliberately honest about what does
-> not exist yet.** On a public repo, a claim the code does not contain reads as
-> vapour. See D23 in [DRAWBACK.md](DRAWBACK.md).
+> **This README is deliberately honest about what does not exist yet.** On a
+> public repo, a claim the code does not contain reads as vapour. See D23b in
+> [DRAWBACK.md](DRAWBACK.md). *(Owned by Track A since 2026-08-30 — see
+> CONTRACTS §1; Track B supplies the gateway section.)*
 
 | Part | State | Tests |
 |---|---|---|
@@ -29,8 +30,12 @@ one line — its `base_url` — and nothing else.
 | Metrics + canaries (P10) | ✅ done | 22 |
 | Cost ledger (P11) | ✅ done | 25 |
 | Commit-point buffer (P4) | ✅ done | 28 |
-| Async quality checks (P7) | ✅ done (thin) | 22 |
-| Dashboard (P12) | ⬜ next | |
+| Async quality checks (P7) | ✅ done (thin) | 25 |
+| Dashboard (P12) | ✅ done | 14 |
+| Demo cut + repo (P14) | 🔨 in progress | |
+
+**377 tests, no network and no API key required.** The dashboard needs a local
+model; everything else runs offline.
 
 Scope and ordering: [BUILD-PLAN.md](BUILD-PLAN.md).
 
@@ -51,6 +56,8 @@ Scope and ordering: [BUILD-PLAN.md](BUILD-PLAN.md).
 | [DRAWBACK.md](DRAWBACK.md) | Internally honest gaps, weaknesses and accepted trade-offs |
 | [BUILD-PLAN.md](BUILD-PLAN.md) | The fourteen parts, sized and ordered |
 | [Implementation.md](Implementation.md) | Approach trade-offs per technique |
+| [PHASE-6-PLAN.md](PHASE-6-PLAN.md) | The dashboard and demo cut: audit, design, build order |
+| [CONTEXT.md](CONTEXT.md) | The whole project in one file, for a fresh reader |
 
 ---
 
@@ -71,6 +78,36 @@ python -m controlplane.seed.generate      # writes seed/data/records.jsonl
 python -m controlplane.gateway.app        # serves on :8000
 python scripts/demo_roundtrip.py          # prints the proof
 ```
+
+### Running the dashboard
+
+The demo surface narrates one request through every stage and renders only
+what the backend computed. It needs a local model so it runs with no API key
+and no network.
+
+```bash
+# 1. a local model  (https://ollama.com)
+ollama pull llama3.2:1b
+
+# 2. the demo server  — real modules, one event stream
+python -m controlplane.demo.server        # http://127.0.0.1:8000
+
+# 3. the dashboard
+cd dashboard && npm install && npm run dev # http://localhost:3000
+```
+
+Five pages, and each one is the evidence for a claim rather than a chart of it:
+
+| Page | What you can check |
+|---|---|
+| **Transit** | The prompt, what the provider received, the raw stream, the restored answer — side by side, live. Plus a leak check asserting no mapped value appears in the dispatched text |
+| **Profiles** | Change a threshold; the fingerprint changes and the diff is printed. Try to exempt a credential and watch the compiler refuse |
+| **Review** | A reversible finding on a high-risk route, a verdict, and the policy change the evidence supports |
+| **Chain** | Verify the audit chain, then tamper with an entry and watch verification name the exact seq where it breaks |
+| **Measures** | A canary sweep run on demand, cost as gross/overhead/net, a real counterfactual bias probe — each with what it cannot tell you |
+
+`GET /demo/health` reports whether the model is reachable before you start,
+because an empty screen mid-take is the worst failure available.
 
 ---
 
@@ -148,8 +185,8 @@ BIAS PROBE    : same request, name changed (Priya -> Rajesh): reject -> advance
 Two tracks, strict file ownership, one shared contract.
 
 - **Track A** owns `controlplane/engine/**` and `tests/test_engine/**`
-- **Track B** owns `controlplane/gateway/**`, `controlplane/seed/**`,
-  `tests/test_gateway/**`, and this README
+- **Track B** owns `controlplane/gateway/**`, `controlplane/seed/**` and
+  `tests/test_gateway/**`
 - **[CONTRACTS.md](CONTRACTS.md)** is edited only by agreement, and always
   *before* the code that depends on the change
 

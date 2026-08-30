@@ -43,7 +43,12 @@ from controlplane.decision.tiers import Signal
 # from IDEATION 11.5. No numbers, dates or proper nouns means nothing to check,
 # and most traffic exits here for free.
 _NUMBER_RE = re.compile(r"\b\d[\d,.]*\b")
-_PROPER_RE = re.compile(r"\b[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})*\b")
+# A run joins on SPACES, not on any whitespace. `\s+` crosses newlines, so an
+# email's "...Your Account Balance\n\nDear Priya Sharma" matched as one
+# eight-word entity - which appears in no source, so the whole greeting got
+# reported as fabricated. A capitalised word ending one line and one starting
+# the next are not a phrase.
+_PROPER_RE = re.compile(r"\b[A-Z][a-z]{2,}(?:[ \t]+[A-Z][a-z]{2,})*\b")
 _STOPWORDS = {
     "The", "This", "That", "These", "Those", "There", "Their", "They", "Then",
     "However", "Please", "Dear", "Thank", "Thanks", "Your", "Yours", "From",
@@ -69,12 +74,24 @@ def extract_entities(text: str) -> set[str]:
     for match in _PROPER_RE.finditer(text):
         phrase = match.group(0)
         words = phrase.split()
+
+        # Trim leading and trailing stopwords BEFORE judging the run. A
+        # salutation glues one onto the front - "Dear Priya Sharma" is a
+        # three-word capitalised run - and comparing that against a question
+        # containing "Priya Sharma" finds no match, so the greeting itself
+        # gets reported as a fabricated entity. The check was right that the
+        # exact phrase had no provenance and wrong about what the phrase was.
+        while words and words[0] in _STOPWORDS:
+            words = words[1:]
+        while words and words[-1] in _STOPWORDS:
+            words = words[:-1]
+        if not words:
+            continue
+
         if len(words) == 1:
-            if words[0] in _STOPWORDS:
+            if _starts_a_sentence(text, match.start()) and words[0] == match.group(0):
                 continue
-            if _starts_a_sentence(text, match.start()):
-                continue
-        entities.add(phrase)
+        entities.add(" ".join(words))
     return entities
 
 

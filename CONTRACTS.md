@@ -25,15 +25,34 @@ Portion 1 owners:
 | `controlplane/metrics/**` | **A** | Added 2026-08-30 (P10). New lane |
 | `controlplane/stream/**` | **A** | Added 2026-08-30 (P4). New lane |
 | `controlplane/quality/**` | **A** | Added 2026-08-30 (P7). New lane |
+| `controlplane/demo/**` | **A** | Added 2026-08-30 (P14). The instrumented demo surface. **Not the gateway** - see the note below |
 | `controlplane/gateway/**` | **B** | A never edits |
 | `controlplane/seed/**` | **B** | A consumes the *data*, never edits the generator |
 | `tests/test_engine/**`, `tests/test_policy/**`, `tests/test_audit/**`, `tests/test_decision/**`, `tests/test_feedback/**`, `tests/test_cost/**`, `tests/test_metrics/**`, `tests/test_stream/**`, `tests/test_quality/**` | **A** | |
 | `tests/test_gateway/**` | **B** | |
+| `dashboard/**` | **A** | Added 2026-08-30 (P12). Renders demo events; computes nothing |
 | `CONTRACTS.md` | **both** | Only by agreement. Announce before editing |
 | `README.md` | **A** | ⚠️ Reassigned 2026-08-30. Was B's; A edited it through phases 2–5 without asking, which is the boundary this table exists to protect. It now documents packages A owns, so the honest fix is to move ownership rather than keep a rule neither of us follows. B supplies the gateway/seed section when asked. **Pending B's confirmation.** |
 | `requirements.txt` | **both** | Append only; never remove another track's dep |
 
 Staying inside your lane means you will almost never hit a merge conflict.
+
+### Why `demo/` exists next to `gateway/`, and is not the same thing
+
+`controlplane/gateway/` is **Track B's** and carries the integration claim:
+`/v1/chat/completions`, `/v1/embeddings`, and an unmodified `openai` client
+working with only `base_url` changed. That is the thing a judge can verify in
+ten seconds and it must stay wire-compatible.
+
+`controlplane/demo/` is **Track A's** and is a different job: an instrumented
+narration of the same pipeline that emits a typed event per stage so the
+dashboard can render what each module actually returned. It exists because a
+tool working on the demo overwrote `gateway/app.py` with a bespoke
+`/v1/chat/simulate` route, which deleted the OpenAI-compatible endpoints and
+put a demo-only file in the middle of Track B's lane, three days before their
+PR. Separating the two means neither can do that to the other again.
+
+**Nothing in `demo/` may be imported by `gateway/`, or the reverse.**
 
 ---
 

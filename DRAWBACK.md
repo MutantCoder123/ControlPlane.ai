@@ -272,7 +272,7 @@ seed data rather than inferring it at runtime.
 ## 4. Pitch and narrative risks
 
 ### D17 — Our most quotable statistics describe channels we do not cover
-🔴 `open`
+🔴 `mitigated`
 
 The shadow-AI numbers (share of pasted content containing sensitive data,
 personal-account usage, added breach cost) all describe browser and
@@ -283,14 +283,27 @@ slide and then demoing a `base_url` proxy is a mismatch a sharp judge catches.
 deployment** framing instead. Keep shadow-AI stats only if we explicitly scope
 them as "the adjacent problem we do not solve."
 
+`mitigated` 2026-08-30 — P12 gives us somewhere else to get numbers. Every
+figure the dashboard shows is computed by this repo, during the run that
+displays it: canary catch rate with its interval, cost as gross/overhead/net,
+hallucination confidence with the arithmetic beside it. A demo that quotes its
+own instrumentation does not need a vendor statistic about a channel we do not
+cover. **Not resolved**, because the drawback is about the slide deck and the
+deck does not exist yet — the fix is to write it without those numbers.
+
 ### D18 — Our source statistics are marketing-grade and mutually inconsistent
-🟠 `open`
+🟠 `mitigated`
 
 The sensitive-paste rate appears as both 11% and 39.7% citing the same vendor.
 
 *Stance:* slide-safe only where a named primary source exists (Gartner, IBM
 Cost of a Data Breach). Verify anything else against the primary report before
 it reaches a slide.
+
+`mitigated` 2026-08-30 — same lever as D17. The strongest number in the pitch
+is now one a judge can reproduce from a clean checkout in ninety seconds,
+which is a stronger position than any citation. The inconsistent vendor figures
+stay out of the deck rather than getting reconciled.
 
 ### D19 — Three shallow pillars read as a wrapper around three API calls
 🔴 `open`
@@ -671,3 +684,54 @@ It now fails to compile.
   than quietly corrected. (3) **D23 split into D23a/D23b**, because half of it
   followed the README to a different owner — and D23b fired immediately, on
   three documents still asserting the old ownership. 356 tests.
+- **2026-08-30** — Phase 6, part one: **P12 built** (the dashboard) and the
+  demo pipeline moved into a `controlplane/demo/` lane. **D17 and D18
+  mitigated** (not resolved - they are about the slide deck, which does not
+  exist yet): every number the surface shows is now computed by a module in
+  this repo during the run that displays it, and the events carry the method
+  beside the number — the canary catch rate with its Wilson interval and its
+  caveat, cost as gross/overhead/net together, the hallucination confidence
+  with the arithmetic that produced it. The panels that cannot produce a
+  number say `NOT MEASURED` or `NOT BUILT` and give the reason. 377 tests.
+
+  **Four defects found, three of them by watching the demo rather than by a
+  test.** Worth recording because they are all the same shape — a real
+  module bypassed, and the bypass looking fine on screen:
+
+  1. **The demo blocked every useful prompt.** `signals_from_findings` marked
+     every finding `reversible=False`, so a known-value name at confidence 1.0
+     cleared `block_at` and refused the exact input the product exists to
+     handle. The first attempt at a fix was a per-profile exemption list,
+     which (a) missed `payment_card`, so a substituted card still blocked,
+     (b) repurposed the one field the feedback loop writes to, and (c)
+     silently disabled the ungoverned floor D28 exists to demonstrate. The
+     real fix is `Signal.mitigated`, set from `Finding.action`: substitution
+     *is* the mitigation, so the finding still reaches the audit line and the
+     metrics — it just no longer has anything to prevent.
+  2. **A salutation read as a fabricated person.** `entity_not_in_source`
+     kept "Dear Priya Sharma" as one three-word run, found no match for that
+     exact phrase, and reported the greeting as invented.
+  3. **Capitalised runs spanned line breaks.** `\s+` between words crosses
+     newlines, so an email's subject line and its salutation joined into one
+     eight-word "entity" that appeared in no source. The noise is the damage:
+     an evidence line nobody can act on is precisely the alert fatigue the
+     brief warns about.
+  4. **The review queue could never fill.** Once substitution counted as
+     mitigation, no inbound finding reached the review tier — correctly, since
+     there is nothing for a human to decide about a value the provider never
+     saw. The queue's real source of work is a *reversible* finding on a route
+     whose profile reviews everything, and that was never wired.
+
+  Two things the previous demo build did that this replaces, both of them D23
+  pointed at the video: it re-implemented the commit-point buffer in three
+  lines (`if "[[" in buffer and "]]" not in buffer`) while P4 sat unused, and
+  the browser re-found placeholders with `/\[\[[A-Z_]+\]\]/` — hardcoding a
+  format CONTRACTS §4 reserves to Track A, and already wrong, since the 27th
+  customer in a request is `[[CUST_A2]]`.
+
+  *The pattern, again:* four defects, three found by using the thing. The
+  restore path and the seams around it are where this product fails, and none
+  of the four was visible to a passing unit test. `tests/test_demo/` now
+  drives the whole pipeline with a fake model — fourteen tests, and a
+  mutation check confirms they go red when the buffer is bypassed or the
+  original text is dispatched.

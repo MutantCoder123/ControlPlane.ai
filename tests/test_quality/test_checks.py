@@ -239,3 +239,53 @@ def test_consistency_sampling_is_absent_for_a_stated_reason():
     assert consistency_sample("answer", lambda p: p) == []
     assert "NOT IMPLEMENTED" in consistency_sample.__doc__
     assert "D11" in consistency_sample.__doc__
+
+
+def test_a_salutation_is_not_a_fabricated_person():
+    """Found by watching the demo, not by a test.
+
+    "Dear Priya Sharma" is a three-word capitalised run, so it was kept whole
+    and compared against a question containing "Priya Sharma" - no match, and
+    the greeting was reported as an entity with no provenance. The check was
+    right that the exact phrase was absent and wrong about what the phrase
+    was, which is the shape of false positive that teaches people to dismiss
+    the flag.
+    """
+    question = "Customer: Priya Sharma. Balance: 45230."
+    answer = "Dear Priya Sharma, your balance is 45230."
+
+    assert entity_not_in_source(answer, question) == []
+    assert "Priya Sharma" in extract_entities(answer)
+    assert "Dear Priya Sharma" not in extract_entities(answer)
+
+
+def test_trimming_the_greeting_does_not_hide_a_real_fabrication():
+    """The guard on the fix above.
+
+    Trimming leading stopwords must not become a way for an invented name to
+    ride in behind one.
+    """
+    findings = entity_not_in_source(
+        "Dear Priya Sharma, please contact Rahul Verma about 5427 rupees.",
+        "Customer: Priya Sharma. Balance: 45230.",
+    )
+    assert findings
+    assert "5427" in findings[0].evidence
+    assert "Rahul Verma" in findings[0].evidence
+
+
+def test_a_capitalised_run_does_not_span_a_line_break():
+    """Also found by watching the demo.
+
+    `\s+` between words crosses newlines, so an email's subject line and its
+    salutation joined into one long "entity" that matched nothing in the
+    source - and the check reported the entire greeting as fabricated. The
+    noise is the damage: an evidence line nobody can act on is the alert
+    fatigue the brief warns about.
+    """
+    answer = "Subject: Update on Your Account Balance\n\nDear Priya Sharma, hello."
+    entities = extract_entities(answer)
+
+    assert "Priya Sharma" in entities
+    assert not any("\n" in e for e in entities)
+    assert not any(len(e.split()) > 3 for e in entities)

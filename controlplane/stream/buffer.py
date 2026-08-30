@@ -59,6 +59,11 @@ class Release:
     text: str
     kind: str = "text"          # "text" | "blocked"
     reason: str | None = None
+    #: Which commit rule fired: "boundary" | "tokens" | "timeout" | "flush".
+    #: Observability only - nothing branches on it. It exists because "we
+    #: buffer to a commit point" is a claim a reader should be able to watch
+    #: happening rather than take on trust.
+    trigger: str | None = None
 
     @property
     def blocked(self) -> bool:
@@ -111,6 +116,23 @@ class CommitPointBuffer:
         """False for batch and agentic routes - see D6 in the module docstring."""
         return self.profile.streaming.buffered
 
+    @property
+    def pending_chars(self) -> int:
+        """Accumulated, not yet scanned. Observability only."""
+        return len(self._pending)
+
+    @property
+    def held_chars(self) -> int:
+        """The overlap window: scanned, deliberately not yet released.
+
+        This is the number that makes D5 visible. A secret straddling a
+        commit point is only caught because the tail of the last window is
+        re-scanned with the head of the next, and holding it back is the
+        cost of that. A reader should be able to see the cost, not just be
+        told it is small.
+        """
+        return len(self._held)
+
     def feed(self, chunk: str) -> list[Release]:
         if self._stopped or not chunk:
             return []
@@ -125,8 +147,8 @@ class CommitPointBuffer:
             return []
 
         releases: list[Release] = []
-        while self._should_commit():
-            release = self._commit(final=False)
+        while (trigger := self._should_commit()) is not None:
+            release = self._commit(final=False, trigger=trigger)
             if release is not None:
                 releases.append(release)
             if self._stopped:
@@ -138,25 +160,27 @@ class CommitPointBuffer:
         if self._stopped:
             return []
         releases = []
-        release = self._commit(final=True)
+        release = self._commit(final=True, trigger="flush")
         if release is not None:
             releases.append(release)
         return releases
 
     # -- internals ---------------------------------------------------------
 
-    def _should_commit(self) -> bool:
+    def _should_commit(self) -> str | None:
+        """Which rule fires, or None. Returns the reason so it can be shown."""
         streaming = self.profile.streaming
         if _BOUNDARY_RE.search(self._pending):
-            return True
+            return "boundary"
         if _approx_tokens(self._pending) >= streaming.commit_tokens:
-            return True
+            return "tokens"
         if self._started is not None:
             elapsed_ms = (self._clock() - self._started) * 1000
-            return elapsed_ms >= streaming.commit_ms and bool(self._pending)
-        return False
+            if elapsed_ms >= streaming.commit_ms and self._pending:
+                return "timeout"
+        return None
 
-    def _commit(self, *, final: bool) -> Release | None:
+    def _commit(self, *, final: bool, trigger: str | None = None) -> Release | None:
         """Scan held+pending as one piece, release all but the new tail."""
         if not self._pending and not self._held:
             return None
@@ -176,6 +200,7 @@ class CommitPointBuffer:
                 text="",
                 kind="blocked",
                 reason=getattr(result, "block_reason", None) or "outbound scan blocked",
+                trigger=trigger,
             )
 
         overlap = 0 if final else self.profile.streaming.overlap_chars
@@ -202,7 +227,7 @@ class CommitPointBuffer:
             out = self.restore(out, self.mapping).text
 
         self.stats.released_chars += len(out)
-        return Release(text=out)
+        return Release(text=out, trigger=trigger)
 
 
 def _approx_tokens(text: str) -> int:
