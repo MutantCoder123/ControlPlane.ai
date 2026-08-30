@@ -65,6 +65,40 @@ class RestoreResult:
 
 
 @dataclass
+class RequestScope:
+    """Placeholder identity across the several scans that make up one request.
+
+    A request is rarely one piece of text. It is a system prompt, a few
+    messages, sometimes several content parts per message - and every one of
+    them gets scanned separately. Without a shared scope each scan starts
+    numbering at A, so two different customers in one request both become
+    [[CUST_A]]: the provider is told they are the same person, and restoring
+    the merged mapping puts the wrong name back.
+
+    CONTRACTS.md section 3 already says the mapping is REQUEST-SCOPED. This is
+    the object that makes "a request" expressible, rather than something the
+    caller has to fake by concatenating text.
+
+    STATELESSNESS (IDEATION section 3): the scope is created by the caller,
+    passed in, and dropped when the request ends. The engine keeps no
+    reference to it and holds no scopes of its own - there is nothing here
+    that outlives a request.
+    """
+
+    #: (category, normalised value) -> placeholder. This is what makes the
+    #: same entity resolve to the same placeholder in message 1 and message 7,
+    #: so the model can still tell it is one person.
+    assigned: dict[tuple[str, str], str] = field(default_factory=dict)
+    #: next index per category
+    counters: dict[str, int] = field(default_factory=dict)
+    #: placeholder -> original, cumulative across the whole request
+    mapping: dict[str, str] = field(default_factory=dict)
+
+    def __len__(self) -> int:
+        return len(self.mapping)
+
+
+@dataclass
 class EngineConfig:
     """Tuning knobs. Deliberately small in Portion 1.
 
