@@ -25,6 +25,8 @@ from controlplane.engine.substitute import SubstitutionEngine
 from controlplane.gateway.context import create_request_context
 from controlplane.gateway.pipeline import GatewayPipeline
 from controlplane.gateway.upstream import FakeUpstreamClient, HttpUpstreamClient, UpstreamClient
+from controlplane.policy.profile import PolicyError
+from controlplane.policy.store import ControlPlane
 from controlplane.seed.generate import DEFAULT_DATA_PATH, generate_seed_records
 
 
@@ -45,6 +47,11 @@ class ChatCompletionRequest(BaseModel):
 class EmbeddingRequest(BaseModel):
     model: str = "text-embedding-3-small"
     input: str | list[str]
+
+
+#: Matches one of the profiles the policy engine compiles. A name that is not
+#: in controlplane/policy/profiles/ fails closed rather than degrading quietly.
+DEFAULT_PROFILE = "internal-knowledge"
 
 
 def create_app(
@@ -70,10 +77,21 @@ def create_app(
         if openai_key:
             provider = HttpUpstreamClient(api_key=openai_key)
         else:
-            # Fallback to offline fake provider
+            # No key, so we fall back to the offline fake. This is right for
+            # tests and dangerous on stage: the fake echoes the prompt back, so
+            # a round trip would look perfect and prove nothing. It is named in
+            # /healthz and in every response so the fallback can never be
+            # mistaken for a live provider.
             provider = FakeUpstreamClient()
 
-    pipeline = GatewayPipeline(engine=sub_engine, upstream=provider)
+    # The compiled policy artefact. profile_for() raises PolicyError on an
+    # unknown name rather than falling back to something permissive
+    # (CONTRACTS.md section 6a).
+    policy_store = ControlPlane().store(default_profile=DEFAULT_PROFILE)
+
+    pipeline = GatewayPipeline(
+        engine=sub_engine, upstream=provider, policy_store=policy_store
+    )
 
     @app.get("/healthz")
     async def healthz():
@@ -81,6 +99,9 @@ def create_app(
             "status": "ok",
             "portion": 1,
             "governed_records": sub_engine.store.record_count,
+            "provider": getattr(provider, "name", "unknown"),
+            "live_provider": bool(getattr(provider, "is_live", False)),
+            "profiles": policy_store.bundle.names,
         }
 
     @app.post("/v1/chat/completions")
@@ -96,12 +117,29 @@ def create_app(
 
         messages_dict = [m.model_dump() for m in req.messages]
 
-        result = await pipeline.execute_chat(
-            messages=messages_dict,
-            context=ctx,
-            model=req.model,
-            stream=req.stream,
-        )
+        try:
+            result = await pipeline.execute_chat(
+                messages=messages_dict,
+                context=ctx,
+                model=req.model,
+                stream=req.stream,
+            )
+        except PolicyError as exc:
+            # An unknown profile is a configuration mistake, and the safe answer
+            # to one is "no". Falling back to a default profile would mean the
+            # request runs under a policy nobody chose, which is the quiet
+            # failure the whole control plane exists to prevent.
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": {
+                        "message": str(exc),
+                        "type": "invalid_request_error",
+                        "param": "X-ControlPlane-Profile",
+                        "code": "unknown_profile",
+                    }
+                },
+            )
 
         if not req.stream:
             return JSONResponse(content=result)

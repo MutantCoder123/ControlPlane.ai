@@ -134,3 +134,68 @@ async def test_openai_client_with_only_base_url_changed():
 
         assert completion.choices[0].message.content == "Processed request for Priya Sharma successfully."
 
+
+
+def test_healthz_says_when_the_provider_is_a_fake():
+    """A demo must never be able to look real while running on canned answers.
+
+    With no OPENAI_API_KEY the gateway falls back to the offline fake, which
+    echoes the prompt back. That is right for tests and fatal on stage if
+    nothing says it is happening - the round trip would look perfect and prove
+    nothing. So the provider is named where anyone can see it.
+    """
+    engine = SubstitutionEngine(FIXTURES_PATH)
+    app = create_app(
+        engine=engine, upstream=FakeUpstreamClient(), records_path=FIXTURES_PATH
+    )
+    data = TestClient(app).get("/healthz").json()
+
+    assert data["provider"] == "fake"
+    assert data["live_provider"] is False
+
+
+def test_response_names_the_provider_that_answered():
+    engine = SubstitutionEngine(FIXTURES_PATH)
+    app = create_app(
+        engine=engine, upstream=FakeUpstreamClient(), records_path=FIXTURES_PATH
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "gpt-4o",
+            "messages": [{"role": "user", "content": "hello"}],
+            "stream": False,
+        },
+    )
+    assert response.json()["controlplane"]["provider"] == "fake"
+
+
+def test_unknown_profile_is_refused_not_quietly_defaulted():
+    """An unknown profile must fail closed.
+
+    Falling back to a default would run the request under a policy nobody
+    chose - the quiet failure the control plane exists to prevent. The engine
+    raises PolicyError precisely so this cannot degrade silently; the gateway's
+    job is to turn that into an honest 400.
+    """
+    engine = SubstitutionEngine(FIXTURES_PATH)
+    app = create_app(
+        engine=engine, upstream=FakeUpstreamClient(), records_path=FIXTURES_PATH
+    )
+    client = TestClient(app)
+
+    # Both paths, because the resolution used to happen only when streaming.
+    for streaming in (False, True):
+        response = client.post(
+            "/v1/chat/completions",
+            headers={"X-ControlPlane-Profile": "internal-assistant"},  # stale name
+            json={
+                "model": "gpt-4o",
+                "messages": [{"role": "user", "content": "hello"}],
+                "stream": streaming,
+            },
+        )
+        assert response.status_code == 400, streaming
+        assert response.json()["error"]["code"] == "unknown_profile"
