@@ -50,7 +50,7 @@ a demo moment. Everything else earns a sentence.
 | **Answer, don't build** | D3, D4, D5, D8, D9, D10, D11, D12, D14, D16, D27, D28 | Structural (D12), prototype-vs-production (D14), or better as an argument than a feature (D27). Conceding them is the credibility move |
 | **Slide hygiene, zero build** | D17, D18 | Just don't put the shadow-AI stats on a slide |
 | **Moot — do not spend a minute** | **D13**, mostly D6 | D13 is a drawback of semantic caching, which §19 already decided not to build. D6 only bites if we build the batch profile, which we shouldn't |
-| **Format risks, decide now** | **D22**, **D23** | Demo does not fit the time budget; stubs must be labelled as stubs |
+| **Format risks, decide now** | **D22**, **D23a**, **D23b** | Demo does not fit the time budget; stubs must be labelled as stubs |
 
 ### Build order (revised after the Round 2 brief)
 
@@ -337,7 +337,7 @@ the centrepiece, **step 2 (credential block)**, **step 7 (live policy change)**,
 *Decide before building, not on stage.* Each cut step is build time saved.
 
 ### D23 — A public repo makes "stub convincingly" a liability
-🟠 `open` · **solve — cheaply, by labelling**
+🟠 `open` · **split into D23a / D23b on 2026-08-30** — see below
 
 Round 2 requires a public GitHub repo and a README documenting architecture.
 §19's build/explain split assumes judges see only the demo. They do not — a
@@ -348,6 +348,38 @@ README but not implemented must say so in the code and the README, in the same
 words. An honest `# not implemented for prototype — see IDEATION §19` scores
 better than an empty function where a bias probe was promised. This costs
 about an hour of discipline and removes a whole class of reviewer suspicion.
+
+**The split.** Track B pointed out that when `README.md` moved to Track A, half
+of D23 went with it — a drawback cannot be owned by someone who does not own
+the file it lives in. Two halves, two owners, same discipline:
+
+- **D23a — Track B.** Unmarked stubs in `gateway/` and `seed/` code.
+- **D23b — Track A.** The README and design docs asserting things the code, or
+  the repo, does not do.
+
+### D23b — Docs asserting what the repo does not do
+🟠 `open` · Track A · **this one has already fired once**
+
+The inward-facing case, and we walked straight into it. `README.md` ownership
+moved to Track A on 2026-08-30, but three other documents still told the reader
+it belonged to Track B — `ONBOARDING.md`'s D23 row, verbatim *"You own the
+README"*, and two places in `TRACK-B.md` including a section headed *"Part 3 —
+README.md (yours to own)"*.
+
+None of those files is in the §1 ownership table, so nobody thought to check
+them when the table changed.
+
+*Track B's framing, which is the useful part:* this is the D23 failure
+**pointed inward**. We had a rule for "the README claims something the code
+does not do" and no equivalent for "the docs claim something the **repo** does
+not do" — even though the second is what a new reader hits first. The next
+person to open ONBOARDING would have got the old answer with nothing marking it
+stale.
+
+*Stance:* when an ownership row changes, grep the doc set for the old claim
+before committing. Ownership lives in one table but is *asserted* in at least
+four files, and the table being right is not the same as the repo being
+consistent.
 
 ---
 
@@ -630,3 +662,12 @@ It now fails to compile.
   thing rather than reading it.* The pattern is worth naming in the pitch: the
   restore path is where this product fails, and every one of them was invisible
   to a unit test that exercised a single call.
+- **2026-08-30** — Track B's PR review produced three corrections to Track A.
+  (1) Two tests in Track A's suite matched the failure shapes they identified —
+  a round-trip test built from its own output, and one with no assert. Fixed,
+  and the check is now on the WORKFLOW review checklist with four named shapes.
+  (2) `README.md` ownership moved to Track A, which had been editing it for
+  four phases without asking; the crossing is recorded in WORKFLOW §2 rather
+  than quietly corrected. (3) **D23 split into D23a/D23b**, because half of it
+  followed the README to a different owner — and D23b fired immediately, on
+  three documents still asserting the old ownership. 356 tests.
