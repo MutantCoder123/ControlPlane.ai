@@ -30,7 +30,7 @@ Portion 1 owners:
 | `tests/test_engine/**`, `tests/test_policy/**`, `tests/test_audit/**`, `tests/test_decision/**`, `tests/test_feedback/**`, `tests/test_cost/**`, `tests/test_metrics/**`, `tests/test_stream/**`, `tests/test_quality/**` | **A** | |
 | `tests/test_gateway/**` | **B** | |
 | `CONTRACTS.md` | **both** | Only by agreement. Announce before editing |
-| `README.md` | **B** | A supplies the engine section when asked |
+| `README.md` | **A** | ⚠️ Reassigned 2026-08-30. Was B's; A edited it through phases 2–5 without asking, which is the boundary this table exists to protect. It now documents packages A owns, so the honest fix is to move ownership rather than keep a rule neither of us follows. B supplies the gateway/seed section when asked. **Pending B's confirmation.** |
 | `requirements.txt` | **both** | Append only; never remove another track's dep |
 
 Staying inside your lane means you will almost never hit a merge conflict.
