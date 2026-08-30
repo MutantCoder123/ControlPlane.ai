@@ -80,7 +80,7 @@ def create_app(
         return {
             "status": "ok",
             "portion": 1,
-            "governed_records": sub_engine.known_store.governed_count,
+            "governed_records": sub_engine.store.record_count,
         }
 
     @app.post("/v1/chat/completions")

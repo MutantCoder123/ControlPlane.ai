@@ -48,16 +48,19 @@ async def test_credential_refused_before_dispatch():
 async def test_normal_request_dispatched_and_restored():
     engine = SubstitutionEngine(FIXTURES_PATH)
     
-    # Fake returns response referencing the placeholder
+    # Ask the engine what placeholder it will mint, rather than typing one.
+    # CONTRACTS.md section 4: Track A owns the format and may change it; a
+    # literal here is a live D15 bug even on the day it happens to match.
+    prompt = "Please verify account for Priya Sharma."
+    placeholder = engine.scan_inbound(prompt).findings[0].placeholder
+
     fake_upstream = FakeUpstreamClient(
-        canned_response_text="Customer [CP_CUSTOMER_NAME_1] has an approved credit limit."
+        canned_response_text=f"Customer {placeholder} has an approved credit limit."
     )
     pipeline = GatewayPipeline(engine=engine, upstream=fake_upstream)
 
     ctx = create_request_context()
-    messages = [
-        {"role": "user", "content": "Please verify account for Priya Sharma."}
-    ]
+    messages = [{"role": "user", "content": prompt}]
 
     res = await pipeline.execute_chat(messages=messages, context=ctx, model="gpt-4o", stream=False)
 
@@ -68,11 +71,11 @@ async def test_normal_request_dispatched_and_restored():
     assert fake_upstream.last_messages is not None
     upstream_user_msg = fake_upstream.last_messages[0]["content"]
     assert "Priya Sharma" not in upstream_user_msg
-    assert "[CP_CUSTOMER_NAME_1]" in upstream_user_msg
+    assert placeholder in upstream_user_msg
 
     # 3. Caller received restored response
     final_content = res["choices"][0]["message"]["content"]
     assert "Priya Sharma" in final_content
-    assert "[CP_CUSTOMER_NAME_1]" not in final_content
+    assert placeholder not in final_content
     assert res["controlplane"]["blocked"] is False
     assert res["controlplane"]["restored_count"] == 1

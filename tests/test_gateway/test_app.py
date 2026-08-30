@@ -41,15 +41,18 @@ def test_healthz_endpoint():
 
 def test_chat_completions_non_streaming():
     engine = SubstitutionEngine(FIXTURES_PATH)
+    # Placeholder derived from the engine, never typed (CONTRACTS.md section 4)
+    prompt = "Check Priya Sharma account."
+    placeholder = engine.scan_inbound(prompt).findings[0].placeholder
     fake_upstream = FakeUpstreamClient(
-        canned_response_text="Customer [CP_CUSTOMER_NAME_1] has balance 45230."
+        canned_response_text=f"Customer {placeholder} has balance 45230."
     )
     app = create_app(engine=engine, upstream=fake_upstream, records_path=FIXTURES_PATH)
     client = TestClient(app)
 
     payload = {
         "model": "gpt-4o",
-        "messages": [{"role": "user", "content": "Check Priya Sharma account."}],
+        "messages": [{"role": "user", "content": prompt}],
         "stream": False,
     }
     response = client.post("/v1/chat/completions", json=payload)
@@ -58,7 +61,7 @@ def test_chat_completions_non_streaming():
 
     # Upstream fake received placeholder
     assert fake_upstream.call_count == 1
-    assert "[CP_CUSTOMER_NAME_1]" in fake_upstream.last_messages[0]["content"]
+    assert placeholder in fake_upstream.last_messages[0]["content"]
 
     # Client received restored content
     content = data["choices"][0]["message"]["content"]
@@ -108,8 +111,10 @@ def test_embeddings_endpoint_d2():
 async def test_openai_client_with_only_base_url_changed():
     """Wire compatibility proof: Unmodified OpenAI Python SDK client."""
     engine = SubstitutionEngine(FIXTURES_PATH)
+    prompt = "Please verify customer Priya Sharma."
+    placeholder = engine.scan_inbound(prompt).findings[0].placeholder
     fake_upstream = FakeUpstreamClient(
-        canned_response_text="Processed request for [CP_CUSTOMER_NAME_1] successfully."
+        canned_response_text=f"Processed request for {placeholder} successfully."
     )
     app = create_app(engine=engine, upstream=fake_upstream, records_path=FIXTURES_PATH)
 
@@ -124,7 +129,7 @@ async def test_openai_client_with_only_base_url_changed():
 
         completion = await openai_client.chat.completions.create(
             model="gpt-4o",
-            messages=[{"role": "user", "content": "Please verify customer Priya Sharma."}],
+            messages=[{"role": "user", "content": prompt}],
         )
 
         assert completion.choices[0].message.content == "Processed request for Priya Sharma successfully."
