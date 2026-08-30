@@ -26,6 +26,7 @@ import time
 from typing import Any, AsyncIterator
 
 from controlplane.engine.api import (
+    RequestScope,
     RestoreResult,
     ScanResult,
 )
@@ -68,7 +69,7 @@ class GatewayPipeline:
         self,
         parts: list[Any],
         all_findings: list,
-        combined_mapping: dict[str, str],
+        scope: RequestScope,
     ) -> tuple[list[Any], bool, str | None]:
         """Scan every text part of a multi-part message.
 
@@ -88,11 +89,10 @@ class GatewayPipeline:
                 out.append(part)
                 continue
 
-            scan_res = self.engine.scan_inbound(text)
+            scan_res = self.engine.scan_inbound(text, scope=scope)
             all_findings.extend(scan_res.findings)
             if scan_res.blocked:
                 return out, True, scan_res.block_reason
-            combined_mapping.update(scan_res.mapping)
             out.append(scan_res.text if key is None else {**part, key: scan_res.text})
         return out, False, None
 
@@ -116,7 +116,13 @@ class GatewayPipeline:
         # 1. Extract prompt text from messages and scan inbound
         # We transform user messages while preserving system/assistant structure
         transformed_messages: list[dict[str, Any]] = []
-        combined_mapping: dict[str, str] = {}
+        # One placeholder namespace for the whole request. Without it every
+        # scan restarts numbering at A, so two customers in one conversation
+        # both become [[CUST_A]]: the provider is told they are the same
+        # person, and the merged mapping restores the wrong name.
+        # The scope is ours, it is passed in, and it dies with the request -
+        # the engine keeps no reference (IDEATION section 3).
+        scope = self.engine.new_request_scope()
         all_findings = []
 
         is_blocked = False
@@ -130,13 +136,12 @@ class GatewayPipeline:
             content = msg.get("content", "")
 
             if isinstance(content, str):
-                scan_res: ScanResult = self.engine.scan_inbound(content)
+                scan_res: ScanResult = self.engine.scan_inbound(content, scope=scope)
                 all_findings.extend(scan_res.findings)
                 if scan_res.blocked:
                     is_blocked = True
                     block_reason = scan_res.block_reason
                     break
-                combined_mapping.update(scan_res.mapping)
                 transformed_messages.append({**msg, "content": scan_res.text})
                 continue
 
@@ -148,7 +153,7 @@ class GatewayPipeline:
                 # in the response said so. An unscanned path is worse than a
                 # refused one, because silence reads as safety.
                 scanned_parts, part_blocked, part_reason = self._scan_parts(
-                    content, all_findings, combined_mapping
+                    content, all_findings, scope
                 )
                 if part_blocked:
                     is_blocked = True
@@ -222,7 +227,7 @@ class GatewayPipeline:
             # Restore real values using request-scoped mapping
             restore_t = time.time()
             restore_res: RestoreResult = self.engine.restore(
-                raw_response_text, combined_mapping
+                raw_response_text, scope.mapping
             )
             context.record_timing("restore_ms", (time.time() - restore_t) * 1000)
 
@@ -255,7 +260,7 @@ class GatewayPipeline:
                 profile,
                 self.engine.scan_outbound,
                 restore=self.engine.restore,
-                mapping=combined_mapping,
+                mapping=scope.mapping,
             )
             template: dict[str, Any] | None = None
 
@@ -317,9 +322,13 @@ class GatewayPipeline:
     ) -> dict[str, Any]:
         """Execute embeddings route with inbound substitution pass (D2)."""
         inputs = [input_data] if isinstance(input_data, str) else input_data
+        # One scope for the batch: a RAG ingestion sends many documents in one
+        # call, and the same person across two of them must be the same
+        # placeholder or the corpus contradicts itself.
+        scope = self.engine.new_request_scope()
         transformed_inputs = []
         for item in inputs:
-            scan_res = self.engine.scan_inbound(item)
+            scan_res = self.engine.scan_inbound(item, scope=scope)
             if scan_res.blocked:
                 return {
                     "object": "error",

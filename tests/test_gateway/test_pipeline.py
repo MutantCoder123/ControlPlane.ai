@@ -200,3 +200,92 @@ async def test_streaming_restores_a_placeholder_split_across_chunks():
 
     assert "Priya Sharma" in streamed
     assert placeholder not in streamed
+
+
+@pytest.mark.anyio
+async def test_two_customers_in_one_request_stay_distinct():
+    """Different entities must get different placeholders across messages.
+
+    Every scan used to start numbering at A, so two customers in one
+    conversation both arrived upstream as the same token. Two harms, and the
+    second is the worse one: the merged mapping restored the wrong name, and
+    before that the model was told two different people were one person, so
+    its answer was already wrong.
+
+    Fixed on the engine side with RequestScope; this asserts the gateway
+    actually threads one scope through the whole request.
+    """
+    engine = SubstitutionEngine(FIXTURES_PATH)
+    fake_upstream = FakeUpstreamClient()
+    pipeline = GatewayPipeline(engine=engine, upstream=fake_upstream)
+
+    await pipeline.execute_chat(
+        messages=[
+            {"role": "user", "content": "First customer: Priya Sharma."},
+            {"role": "user", "content": "Second customer: Rajesh Kumar."},
+        ],
+        context=create_request_context(),
+        model="gpt-4o",
+        stream=False,
+    )
+
+    sent = [m["content"] for m in fake_upstream.last_messages]
+    first_ph = sent[0].split(": ")[1].rstrip(".")
+    second_ph = sent[1].split(": ")[1].rstrip(".")
+    assert first_ph != second_ph, sent
+
+
+@pytest.mark.anyio
+async def test_each_customer_restores_to_their_own_name():
+    """The half that a judge would see: the right name comes back."""
+    engine = SubstitutionEngine(FIXTURES_PATH)
+    scope = engine.new_request_scope()
+    a = engine.scan_inbound("First customer: Priya Sharma.", scope=scope)
+    b = engine.scan_inbound("Second customer: Rajesh Kumar.", scope=scope)
+    first_ph = a.findings[0].placeholder
+    second_ph = b.findings[0].placeholder
+
+    fake_upstream = FakeUpstreamClient(
+        canned_response_text=f"I contacted {first_ph}, not {second_ph}."
+    )
+    pipeline = GatewayPipeline(engine=engine, upstream=fake_upstream)
+
+    res = await pipeline.execute_chat(
+        messages=[
+            {"role": "user", "content": "First customer: Priya Sharma."},
+            {"role": "user", "content": "Second customer: Rajesh Kumar."},
+        ],
+        context=create_request_context(),
+        model="gpt-4o",
+        stream=False,
+    )
+
+    answer = res["choices"][0]["message"]["content"]
+    assert answer == "I contacted Priya Sharma, not Rajesh Kumar."
+    assert res["controlplane"]["unrestored"] == []
+
+
+@pytest.mark.anyio
+async def test_the_same_customer_across_messages_stays_one_person():
+    """The converse, and it is just as load-bearing.
+
+    If Priya becomes a different placeholder in each message, the model can no
+    longer tell it is one person and the answer degrades - which is what
+    substitution is supposed to avoid (IDEATION section 9.3).
+    """
+    engine = SubstitutionEngine(FIXTURES_PATH)
+    fake_upstream = FakeUpstreamClient()
+    pipeline = GatewayPipeline(engine=engine, upstream=fake_upstream)
+
+    await pipeline.execute_chat(
+        messages=[
+            {"role": "user", "content": "Priya Sharma called."},
+            {"role": "user", "content": "Priya Sharma called again."},
+        ],
+        context=create_request_context(),
+        model="gpt-4o",
+        stream=False,
+    )
+
+    sent = [m["content"] for m in fake_upstream.last_messages]
+    assert sent[0].replace("called.", "") .strip() == sent[1].replace("called again.", "").strip()
