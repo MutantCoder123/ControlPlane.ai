@@ -18,11 +18,23 @@ import sys
 # Ensure repository root is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from controlplane.engine.placeholders import find_placeholders
 from controlplane.engine.substitute import SubstitutionEngine
 from controlplane.gateway.context import create_request_context
 from controlplane.gateway.pipeline import GatewayPipeline
 from controlplane.gateway.upstream import FakeUpstreamClient
 from controlplane.seed.generate import DEFAULT_DATA_PATH, generate_seed_records
+
+
+def _placeholder_for(scan_res, category: str) -> str:
+    """The placeholder the engine actually minted for one category."""
+    for finding in scan_res.findings:
+        if finding.category == category and finding.placeholder:
+            return finding.placeholder
+    raise SystemExit(
+        f"demo precondition failed: nothing was substituted for {category!r}. "
+        "Check the seed record is governed and the field is an identifier."
+    )
 
 
 async def run_demo():
@@ -60,9 +72,17 @@ async def run_demo():
 
     # Simulate upstream LLM computing on the placeholders and numbers
     # 125000 + 45230 = 170230
+    # Placeholders come from the scan we just ran, never typed in: Track A owns
+    # the format and may change it (CONTRACTS.md section 4), and a literal here
+    # would make this script "prove" a round trip against a token the engine
+    # never minted.
+    name_ph = _placeholder_for(scan_res, "customer_name")
+    email_ph = _placeholder_for(scan_res, "email")
+
     simulated_upstream_response = (
-        "Based on our records, [CP_CUSTOMER_NAME_1] ([CP_EMAIL_1]) has a total combined asset value "
-        "of 125000 + 45230 = 170230. All accounts for [CP_CUSTOMER_NAME_1]'s profile are in good standing."
+        f"Based on our records, {name_ph} ({email_ph}) has a total combined asset "
+        f"value of 125000 + 45230 = 170230. All accounts for {name_ph}'s profile "
+        "are in good standing."
     )
 
     fake_upstream = FakeUpstreamClient(canned_response_text=simulated_upstream_response)
@@ -92,7 +112,9 @@ async def run_demo():
     has_correct_sum = str(expected_sum) in final_answer
     has_customer_name = "Priya Sharma" in final_answer
     has_customer_email = "priya.sharma@example.com" in final_answer
-    no_placeholders = "[CP_" not in final_answer
+    # Any placeholder-shaped token still in the answer is a D15 failure.
+    # PLACEHOLDER_RE is exactly the alarm for this - use it, do not guess.
+    no_placeholders = not find_placeholders(final_answer)
 
     possessive_pass = "Priya Sharma's" in final_answer
     print(f"  - Customer Name Restored:    {'PASS' if has_customer_name else 'FAIL'}")
@@ -102,7 +124,27 @@ async def run_demo():
     print(f"  - Correct Arithmetic (170230): {'PASS' if has_correct_sum else 'FAIL'}")
 
 
-    print("\n" + "=" * 80)
+    checks = {
+        "customer name restored": has_customer_name,
+        "customer email restored": has_customer_email,
+        "possessive form restored": possessive_pass,
+        "zero leaked placeholders": no_placeholders,
+        "arithmetic correct (170230)": has_correct_sum,
+    }
+    failed = [name for name, ok in checks.items() if not ok]
+
+    print()
+    print("=" * 80)
+    if failed:
+        # This is the CONTRACTS.md section 6 acceptance artefact. It used to
+        # print SUCCESSFUL unconditionally and exit 0, so it could not fail -
+        # and an acceptance check that cannot fail is decoration.
+        print("RESULT: Portion 1 acceptance verification FAILED.")
+        for name in failed:
+            print(f"  - {name}")
+        print("=" * 80)
+        raise SystemExit(1)
+
     print("RESULT: Portion 1 acceptance verification SUCCESSFUL.")
     print("=" * 80)
 
