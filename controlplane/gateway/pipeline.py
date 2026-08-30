@@ -32,14 +32,69 @@ from controlplane.engine.api import (
 from controlplane.engine.substitute import SubstitutionEngine
 from controlplane.gateway.context import RequestContext
 from controlplane.gateway.upstream import UpstreamClient
+from controlplane.policy.profile import Profile
+from controlplane.policy.store import PolicyStore
+from controlplane.stream.buffer import CommitPointBuffer
 
 
 class GatewayPipeline:
     """Orchestrates the inbound scan -> pre-dispatch gate -> upstream -> restore pipeline."""
 
-    def __init__(self, engine: SubstitutionEngine, upstream: UpstreamClient):
+    def __init__(
+        self,
+        engine: SubstitutionEngine,
+        upstream: UpstreamClient,
+        policy_store: PolicyStore | None = None,
+    ):
         self.engine = engine
         self.upstream = upstream
+        #: Optional so a test can build a pipeline with nothing else wired.
+        #: When absent the profile falls back to library defaults, which is
+        #: honest rather than profile-driven - create_app always supplies one.
+        self.policy_store = policy_store
+
+    def _profile_for(self, name: str) -> Profile:
+        """Resolve the request's profile name to a compiled Profile.
+
+        With a store this raises PolicyError on an unknown name rather than
+        falling back to something permissive - failing closed on policy is the
+        same instinct as failing closed on the scanner (IDEATION section 17).
+        """
+        if self.policy_store is not None:
+            return self.policy_store.profile_for(name)
+        return Profile(name=name)
+
+    def _scan_parts(
+        self,
+        parts: list[Any],
+        all_findings: list,
+        combined_mapping: dict[str, str],
+    ) -> tuple[list[Any], bool, str | None]:
+        """Scan every text part of a multi-part message.
+
+        Non-text parts (image_url, input_audio) are passed through: this tier
+        reads text, and pretending to inspect an image would be a claim we
+        cannot support.
+        # not implemented in Portion 1 - non-text parts are out of scope, see
+        # DRAWBACK.md D10
+        """
+        out: list[Any] = []
+        for part in parts:
+            if isinstance(part, str):
+                text, key = part, None
+            elif isinstance(part, dict) and isinstance(part.get("text"), str):
+                text, key = part["text"], "text"
+            else:
+                out.append(part)
+                continue
+
+            scan_res = self.engine.scan_inbound(text)
+            all_findings.extend(scan_res.findings)
+            if scan_res.blocked:
+                return out, True, scan_res.block_reason
+            combined_mapping.update(scan_res.mapping)
+            out.append(scan_res.text if key is None else {**part, key: scan_res.text})
+        return out, False, None
 
     async def execute_chat(
         self,
@@ -52,6 +107,12 @@ class GatewayPipeline:
         """Execute chat completion through the ControlPlane pipeline."""
         start_t = time.time()
 
+        # Resolve the profile FIRST, before scanning and long before dispatch.
+        # An unknown profile is a refusal, and refusals should cost nothing
+        # (IDEATION section 8) - so it happens before any work, and on every
+        # path rather than only the streaming one.
+        profile = self._profile_for(context.profile)
+
         # 1. Extract prompt text from messages and scan inbound
         # We transform user messages while preserving system/assistant structure
         transformed_messages: list[dict[str, Any]] = []
@@ -62,8 +123,13 @@ class GatewayPipeline:
         block_reason = None
 
         for msg in messages:
+            if msg.get("role") != "user":
+                transformed_messages.append(msg)
+                continue
+
             content = msg.get("content", "")
-            if msg.get("role") == "user" and isinstance(content, str):
+
+            if isinstance(content, str):
                 scan_res: ScanResult = self.engine.scan_inbound(content)
                 all_findings.extend(scan_res.findings)
                 if scan_res.blocked:
@@ -72,8 +138,33 @@ class GatewayPipeline:
                     break
                 combined_mapping.update(scan_res.mapping)
                 transformed_messages.append({**msg, "content": scan_res.text})
-            else:
-                transformed_messages.append(msg)
+                continue
+
+            if isinstance(content, list):
+                # The OpenAI SDK sends content as a list of parts for every
+                # multimodal and most tool-augmented calls. Guarding on
+                # `isinstance(content, str)` sent this whole shape upstream
+                # UNSCANNED - real names and live keys included - and nothing
+                # in the response said so. An unscanned path is worse than a
+                # refused one, because silence reads as safety.
+                scanned_parts, part_blocked, part_reason = self._scan_parts(
+                    content, all_findings, combined_mapping
+                )
+                if part_blocked:
+                    is_blocked = True
+                    block_reason = part_reason
+                    break
+                transformed_messages.append({**msg, "content": scanned_parts})
+                continue
+
+            # Some shape we do not understand. Fail closed (IDEATION section 17):
+            # the credential/PII checker blocks when it cannot do its job, because
+            # a broken app beats a leak.
+            is_blocked = True
+            block_reason = (
+                f"unscannable message content of type {type(content).__name__}"
+            )
+            break
 
         context.findings = all_findings
         context.record_timing("scan_inbound_ms", (time.time() - start_t) * 1000)
@@ -139,6 +230,7 @@ class GatewayPipeline:
             upstream_res["choices"][0]["message"]["content"] = restore_res.text
             upstream_res["controlplane"] = {
                 "blocked": False,
+                "provider": getattr(self.upstream, "name", "unknown"),
                 "restored_count": restore_res.restored,
                 "unrestored": restore_res.unrestored,
                 "profile": context.profile,
@@ -147,20 +239,72 @@ class GatewayPipeline:
             }
             return upstream_res
 
-        # 5. Streaming response generator
-        # not implemented in Portion 1: commit-point buffer (P4) — see BUILD-PLAN.md P4
-        # In Portion 1 we stream through chunks and restore tokens
+        # 5. Streaming response, through the commit-point buffer.
+        #
+        # The seam my brief told me to leave is now filled: accumulate, scan,
+        # release - never the other way round (CONTRACTS.md section 6a).
+        #
+        # This path used to build `accumulated_response` and throw it away,
+        # yielding the upstream chunks untouched, so the reader watched
+        # placeholders appear on screen. Restoring each chunk on its own would
+        # not have fixed it either: the fake emits word by word and a real
+        # provider emits token by token, so a placeholder routinely arrives in
+        # pieces and matches nothing. Holding a boundary region is the point.
         async def streaming_pipeline() -> AsyncIterator[dict[str, Any]]:
-            accumulated_response = ""
-            async for chunk in upstream_res:  # type: ignore
-                delta_content = ""
-                if "choices" in chunk and len(chunk["choices"]) > 0:
-                    delta_content = chunk["choices"][0].get("delta", {}).get("content", "")
-                accumulated_response += delta_content
-                yield chunk
+            buffer = CommitPointBuffer(
+                profile,
+                self.engine.scan_outbound,
+                restore=self.engine.restore,
+                mapping=combined_mapping,
+            )
+            template: dict[str, Any] | None = None
 
-            # Final check (P4 commit-point buffer will replace this with sliding overlap guard)
-            # Portion 1 passes through streaming chunks directly
+            def as_chunk(text: str, finish: str | None) -> dict[str, Any]:
+                base = template or {
+                    "id": f"chatcmpl-{context.request_id}",
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": model,
+                }
+                return {
+                    "id": base.get("id"),
+                    "object": "chat.completion.chunk",
+                    "created": base.get("created"),
+                    "model": base.get("model", model),
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"content": text} if text else {},
+                            "finish_reason": finish,
+                        }
+                    ],
+                }
+
+            stopped = False
+            async for chunk in upstream_res:  # type: ignore
+                if template is None:
+                    template = chunk
+                delta = ""
+                if chunk.get("choices"):
+                    delta = chunk["choices"][0].get("delta", {}).get("content") or ""
+                for release in buffer.feed(delta):
+                    if release.blocked:
+                        # Irreversible harm: it is not on screen yet, and this
+                        # is the one moment it can still be stopped.
+                        yield as_chunk("", "content_filter")
+                        stopped = True
+                        break
+                    yield as_chunk(release.text, None)
+                if stopped:
+                    return
+
+            for release in buffer.flush():
+                if release.blocked:
+                    yield as_chunk("", "content_filter")
+                    return
+                yield as_chunk(release.text, None)
+
+            yield as_chunk("", "stop")
 
         return streaming_pipeline()
 

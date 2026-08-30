@@ -6,6 +6,7 @@ Verifies end-to-end substitution -> dispatch -> restoration round trip.
 
 from __future__ import annotations
 
+import json
 import os
 import pytest
 from controlplane.engine.substitute import SubstitutionEngine
@@ -79,3 +80,123 @@ async def test_normal_request_dispatched_and_restored():
     assert placeholder not in final_content
     assert res["controlplane"]["blocked"] is False
     assert res["controlplane"]["restored_count"] == 1
+
+
+@pytest.mark.anyio
+async def test_list_content_is_scanned_not_waved_through():
+    """A message whose content is a list of parts must still be scanned.
+
+    The unmodified OpenAI SDK sends this shape routinely - it is what every
+    multimodal and every tool-augmented client produces. Guarding on
+    `isinstance(content, str)` meant those requests skipped the scanner
+    entirely and the provider received the real record. An unscanned path is
+    worse than a refused one, because nothing says it happened.
+    """
+    engine = SubstitutionEngine(FIXTURES_PATH)
+    fake_upstream = FakeUpstreamClient()
+    pipeline = GatewayPipeline(engine=engine, upstream=fake_upstream)
+
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Look up Priya Sharma please."},
+                {"type": "text", "text": "Her email is priya.sharma@example.com."},
+            ],
+        }
+    ]
+    res = await pipeline.execute_chat(
+        messages=messages, context=create_request_context(), model="gpt-4o", stream=False
+    )
+
+    sent = json.dumps(fake_upstream.last_messages)
+    assert "Priya Sharma" not in sent
+    assert "priya.sharma@example.com" not in sent
+    assert res["controlplane"]["blocked"] is False
+
+
+@pytest.mark.anyio
+async def test_list_content_credential_is_still_refused_before_dispatch():
+    """The pre-dispatch gate has to hold on this shape too (IDEATION section 8)."""
+    engine = SubstitutionEngine(FIXTURES_PATH)
+    fake_upstream = FakeUpstreamClient()
+    pipeline = GatewayPipeline(engine=engine, upstream=fake_upstream)
+
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "deploy with sk-proj-1234567890abcdef1234567890abcdef"}
+            ],
+        }
+    ]
+    res = await pipeline.execute_chat(
+        messages=messages, context=create_request_context(), model="gpt-4o", stream=False
+    )
+
+    assert fake_upstream.call_count == 0
+    assert res["controlplane"]["blocked"] is True
+    assert res["controlplane"]["cost_usd"] == 0.0
+
+
+@pytest.mark.anyio
+async def test_streaming_restores_real_values_to_the_caller():
+    """Streaming must restore too, or the reader watches placeholders appear.
+
+    The old streaming path accumulated the response and threw it away, then
+    yielded the upstream chunks untouched. Every test asserted only that SSE
+    framing existed, so nobody noticed.
+    """
+    engine = SubstitutionEngine(FIXTURES_PATH)
+    prompt = "Write one line about Priya Sharma."
+    placeholder = engine.scan_inbound(prompt).findings[0].placeholder
+
+    fake_upstream = FakeUpstreamClient(
+        canned_response_text=f"Certainly. {placeholder} is a valued customer."
+    )
+    pipeline = GatewayPipeline(engine=engine, upstream=fake_upstream)
+
+    gen = await pipeline.execute_chat(
+        messages=[{"role": "user", "content": prompt}],
+        context=create_request_context(),
+        model="gpt-4o",
+        stream=True,
+    )
+    streamed = ""
+    async for chunk in gen:
+        streamed += chunk["choices"][0].get("delta", {}).get("content", "") or ""
+
+    assert "Priya Sharma" in streamed
+    assert placeholder not in streamed
+
+
+@pytest.mark.anyio
+async def test_streaming_restores_a_placeholder_split_across_chunks():
+    """The boundary case is the whole reason this needs a buffer.
+
+    The fake emits word by word, so a placeholder lands in pieces. Restoring
+    each chunk independently would never match it and the reader would see the
+    token in fragments.
+    """
+    engine = SubstitutionEngine(FIXTURES_PATH)
+    prompt = "Write one line about Priya Sharma."
+    placeholder = engine.scan_inbound(prompt).findings[0].placeholder
+
+    # Split the placeholder itself down the middle across two chunks.
+    half = len(placeholder) // 2
+    chunks = ["Our customer ", placeholder[:half], placeholder[half:], " is in good standing."]
+    fake_upstream = FakeUpstreamClient(canned_chunks=chunks)
+    pipeline = GatewayPipeline(engine=engine, upstream=fake_upstream)
+
+    gen = await pipeline.execute_chat(
+        messages=[{"role": "user", "content": prompt}],
+        context=create_request_context(),
+        model="gpt-4o",
+        stream=True,
+    )
+    streamed = ""
+    async for chunk in gen:
+        streamed += chunk["choices"][0].get("delta", {}).get("content", "") or ""
+
+    assert "Priya Sharma" in streamed
+    assert placeholder not in streamed
