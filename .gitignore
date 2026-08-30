@@ -17,3 +17,6 @@ controlplane/seed/data/*.jsonl
 
 # problem brief - not for the public repo
 Hackathon_guideline.txt
+
+# pitch narrative - working notes, not for the public repo
+PITCH.md

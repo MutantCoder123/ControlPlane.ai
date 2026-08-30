@@ -28,9 +28,9 @@ one line — its `base_url` — and nothing else.
 | Feedback loop (P9) | ✅ done | 22 |
 | Metrics + canaries (P10) | ✅ done | 22 |
 | Cost ledger (P11) | ✅ done | 25 |
-| Commit-point buffer (P4) | ⬜ next | |
-| Async quality checks (P7) | ⬜ next | |
-| Dashboard (P12) | ⬜ not started | |
+| Commit-point buffer (P4) | ✅ done | 28 |
+| Async quality checks (P7) | ✅ done (thin) | 22 |
+| Dashboard (P12) | ⬜ next | |
 
 Scope and ordering: [BUILD-PLAN.md](BUILD-PLAN.md).
 
@@ -127,6 +127,18 @@ because a saving figure that hides its own cost is not a saving figure:
 canary catch rate 100.0% (80/80, 95% CI 95.4%-100.0%)
   on seeded distribution {'aadhaar': 10, 'api_key': 20, 'iban': 10, 'payment_card': 40}
   - says nothing about categories we did not seed
+```
+
+The credential is never transmitted — not deleted after, never sent. The
+stream stops mid-flight, and a secret split across chunk boundaries still
+cannot escape:
+
+```
+CLEAN STREAM  : Dear Priya Sharma, your refund of 45230 is approved. ...
+LEAKY STREAM  : ''  -> blocked: credential in response: api_key
+HALLUCINATION : not found in the source material: 2019, 45230, Circular
+BIAS PROBE    : same request, name changed (Priya -> Rajesh): reject -> advance
+                -> disparity 1.00 across 40 runs
 ```
 
 ---

@@ -20,10 +20,10 @@ Last updated: 2026-08-29.
 | **P1** | Gateway spine | M | — | 🔨 Track B | D3 |
 | **P2** | Profile engine (control plane) | M | — | ✅ **done** | **D20**, D6 |
 | **P3** | Substitution engine | L | *none — library* | ✅ **done** | **D15**, D9, D10, D16 |
-| **P4** | Outbound stream guard | M | P1 | **build** | D5, D6 |
+| **P4** | Outbound stream guard | M | — | ✅ **done** | D5, D6 |
 | **P5** | Pre-flight gate | S | P1 P2 P3 | **build** | — |
 | **P6** | Decision engine (tiers + HITL) | M | P2 | ✅ **done** | **D26** |
-| **P7** | Async quality checks | M | P1 | **thin build** | D11, D12, D27 |
+| **P7** | Async quality checks | M | — | ✅ **done** (thin) | D11, D12, D27 |
 | **P8** | Audit log | S | *none — library* | ✅ **done** | D14 |
 | **P9** | Feedback loop | M | P6 P8 | ✅ **done** | **D24**, D4 |
 | **P10** | Metrics & canaries | M | P8 P13 | ✅ **done** | **D25**, D7 |
@@ -50,8 +50,8 @@ phases, one at a time, with Track B (P1, P13) landing independently.
 | **2. Policy & Audit** | P2, P8 | **D20** ✅, D6, D14 | ✅ **done** |
 | **3. Decision & Feedback** | P6, P9 | **D26** ✅, **D24** ✅, D4 | ✅ **done** |
 | **4. Measurement & Cost** | P10, P11 | **D25** ✅, D7 ✅ | ✅ **done** |
-| 5. Stream & Quality | P4, P7 | D5, D6, D11, D12, D27 | next |
-| 6. Surface & Delivery | P12, P14 | **D22**, **D23**, D17, D18 | |
+| **5. Stream & Quality** | P4, P7 | D6 ✅, D27 ✅, D5, D11, D12 | ✅ **done** |
+| 6. Surface & Delivery | P12, P14 | **D22**, **D23**, D17, D18 | next |
 
 P5 (pre-flight gate) is orchestration over Track B's gateway and lands with
 integration rather than in a phase of its own.
@@ -259,3 +259,7 @@ can begin at the same time.
 - **2026-08-30** — Phase 4 done: P10 metrics/canaries and P11 cost ledger, 296
   tests total. D25 and D7 resolved. Five of the brief's six solutioning areas
   implemented; only Detection's async half (P7) remains.
+- **2026-08-30** — Phase 5 done: P4 commit-point buffer and P7 quality checks,
+  346 tests total. D6 and D27 resolved. **All six of the Round 2 brief's
+  solutioning areas are now implemented.** Only Phase 6 (dashboard, demo cut)
+  and Track B's P1/P13 remain.
