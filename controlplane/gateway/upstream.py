@@ -22,6 +22,15 @@ import httpx
 class UpstreamClient(ABC):
     """Abstract interface for LLM provider client."""
 
+    #: What answered. Surfaced in /healthz and in every response, because a
+    #: demo must never be able to look real while running on canned text.
+    name: str = "unknown"
+
+    @property
+    def is_live(self) -> bool:
+        """True when a real provider is on the other end."""
+        return False
+
     @abstractmethod
     async def chat_completion(
         self,
@@ -47,6 +56,12 @@ class UpstreamClient(ABC):
 class HttpUpstreamClient(UpstreamClient):
     """Real HTTP client connecting to OpenAI or compatible API endpoints."""
 
+    name = "openai-compatible"
+
+    @property
+    def is_live(self) -> bool:
+        return True
+
     def __init__(
         self,
         base_url: str = "https://api.openai.com/v1",
@@ -67,8 +82,8 @@ class HttpUpstreamClient(UpstreamClient):
         headers = {"Authorization": f"Bearer {self.api_key}"}
         payload = {"model": model, "messages": messages, "stream": stream, **kwargs}
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            if not stream:
+        if not stream:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
                     json=payload,
@@ -76,22 +91,27 @@ class HttpUpstreamClient(UpstreamClient):
                 )
                 response.raise_for_status()
                 return response.json()
-            else:
-                # Streaming generator
-                async def stream_generator() -> AsyncIterator[dict[str, Any]]:
-                    async with client.stream(
-                        "POST",
-                        f"{self.base_url}/chat/completions",
-                        json=payload,
-                        headers=headers,
-                    ) as resp:
-                        resp.raise_for_status()
-                        async for line in resp.aiter_lines():
-                            if line.startswith("data: ") and line.strip() != "data: [DONE]":
-                                chunk_json = json.loads(line[6:])
-                                yield chunk_json
 
-                return stream_generator()
+        # The client is opened INSIDE the generator, not around it.
+        # `return stream_generator()` from within an `async with` closes the
+        # client on the way out, so the first .stream() call raised
+        # "Cannot send a request, as the client has been closed." Every test
+        # injects the fake, so that would have failed for the first time on
+        # stage, with a real key, in front of the judges.
+        async def stream_generator() -> AsyncIterator[dict[str, Any]]:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                async with client.stream(
+                    "POST",
+                    f"{self.base_url}/chat/completions",
+                    json=payload,
+                    headers=headers,
+                ) as resp:
+                    resp.raise_for_status()
+                    async for line in resp.aiter_lines():
+                        if line.startswith("data: ") and line.strip() != "data: [DONE]":
+                            yield json.loads(line[6:])
+
+        return stream_generator()
 
     async def embeddings(
         self,
@@ -114,7 +134,17 @@ class HttpUpstreamClient(UpstreamClient):
 class FakeUpstreamClient(UpstreamClient):
     """Test-injectable fake upstream provider requiring zero network and zero API keys."""
 
-    def __init__(self, canned_response_text: str | None = None):
+    name = "fake"
+
+    def __init__(
+        self,
+        canned_response_text: str | None = None,
+        canned_chunks: list[str] | None = None,
+    ):
+        #: Exact chunk boundaries for streaming tests. The interesting failure
+        #: is a placeholder split across two chunks, and word-splitting alone
+        #: cannot express that - so a test can dictate the split.
+        self.canned_chunks = canned_chunks
         self.call_count: int = 0
         self.embeddings_call_count: int = 0
         self.last_messages: list[dict[str, Any]] | None = None
@@ -173,9 +203,16 @@ class FakeUpstreamClient(UpstreamClient):
             # Streaming generator yielding chunks
             async def fake_stream() -> AsyncIterator[dict[str, Any]]:
                 # Split content into words as chunks
-                words = response_content.split(" ")
-                for i, word in enumerate(words):
-                    chunk_text = word + (" " if i < len(words) - 1 else "")
+                if self.canned_chunks is not None:
+                    words = list(self.canned_chunks)
+                    pieces = words
+                else:
+                    words = response_content.split(" ")
+                    pieces = [
+                        w + (" " if i < len(words) - 1 else "")
+                        for i, w in enumerate(words)
+                    ]
+                for i, chunk_text in enumerate(pieces):
                     yield {
                         "id": req_id,
                         "object": "chat.completion.chunk",
@@ -185,7 +222,7 @@ class FakeUpstreamClient(UpstreamClient):
                             {
                                 "index": 0,
                                 "delta": {"content": chunk_text},
-                                "finish_reason": None if i < len(words) - 1 else "stop",
+                                "finish_reason": None if i < len(pieces) - 1 else "stop",
                             }
                         ],
                     }
