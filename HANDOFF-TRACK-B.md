@@ -37,8 +37,18 @@ recoverable. My lane and my partner's lane do not overlap, so my work can be
 | `controlplane/engine/**` | partner (Track A) | **fully implemented now** — was stubs when I cloned |
 | `controlplane/policy/**`, `audit/`, `decision/`, `feedback/`, `cost/`, `metrics/`, `stream/`, `quality/` | partner | **new since I cloned** — did not exist |
 
-Current `main` is at `b769c0b` and has **346 passing tests**. My work must not
-reduce that number.
+Current `main` has **346 passing tests**. My work must not reduce that number.
+
+**Read the current versions of these files from `origin/main`, not from my
+working tree** — my checkout is months of work out of date and its copies of
+`CONTRACTS.md`, `README.md` and `controlplane/engine/` are stale:
+
+```bash
+git fetch origin
+git show origin/main:CONTRACTS.md
+git show origin/main:controlplane/engine/api.py
+git show origin/main:controlplane/engine/placeholders.py
+```
 
 ---
 
