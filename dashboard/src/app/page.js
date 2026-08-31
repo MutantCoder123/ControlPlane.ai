@@ -97,7 +97,8 @@ export default function Transit() {
 
   return (
     <>
-      <h1 className="title">Watch one request cross the line</h1>
+      <span className="eyebrow">Watch one request cross the line</span>
+      <h1 className="title">Transit</h1>
       <p className="lede">
         Everything on this page was computed by a module in this repository, during this run.
         The left half is <strong>inside the building</strong>. The right half is what the model
@@ -308,9 +309,9 @@ export default function Transit() {
 
       {/* -------------------------------------------------- after delivery -- */}
       <div className="cols cols-3" style={{ marginTop: 16 }}>
-        <section className="panel">
+        <section className="panel" data-role="decision">
           <div className="panel-head">
-            <span className="eyebrow">Decision</span>
+            <span className="panel-title">Decision</span>
             {s.decision && <span className="chip" data-tier={s.decision.tier}>{s.decision.tier}</span>}
           </div>
           <div className="panel-body">
@@ -343,9 +344,9 @@ export default function Transit() {
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel" data-role="after-delivery">
           <div className="panel-head">
-            <span className="eyebrow">After delivery · reversible harms</span>
+            <span className="panel-title">After delivery · reversible harms</span>
             {s.qualityDone && <span className="chip mono">{s.quality.length} finding(s)</span>}
           </div>
           <div className="panel-body">
@@ -384,8 +385,8 @@ export default function Transit() {
           </div>
         </section>
 
-        <section className="panel">
-          <div className="panel-head"><span className="eyebrow">Cost of this request</span></div>
+        <section className="panel" data-role="cost">
+          <div className="panel-head"><span className="panel-title">Cost of this request</span></div>
           <div className="panel-body">
             {s.cost ? (
               <>
@@ -426,7 +427,7 @@ export default function Transit() {
       {/* ----------------------------------------------------------- tape -- */}
       <section className="panel" style={{ marginTop: 16 }}>
         <div className="panel-head">
-          <span className="eyebrow">The tape · every event, in order</span>
+          <span className="panel-title">The tape · every event, in order</span>
           <span className="chip mono">{s.events.length} events</span>
         </div>
         <div className="tape">

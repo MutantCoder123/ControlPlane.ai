@@ -39,7 +39,8 @@ export default function Profiles() {
 
   return (
     <>
-      <h1 className="title">Three use cases, three policies, one checkpoint</h1>
+      <span className="eyebrow">Three use cases, three policies, one checkpoint</span>
+      <h1 className="title">Profiles</h1>
       <p className="lede">
         There is no single correct configuration of this gateway, and pretending otherwise is how
         governance products become unusable. Each use case compiles to a named profile with a
@@ -53,7 +54,7 @@ export default function Profiles() {
         {profiles.map((p) => (
           <section className="panel" key={p.name}>
             <div className="panel-head">
-              <span className="eyebrow">{p.name}</span>
+              <span className="panel-title">{p.name}</span>
               <span className="chip mono">{p.fingerprint}</span>
             </div>
             <div className="panel-body">
@@ -96,7 +97,7 @@ export default function Profiles() {
       {result && (
         <section className="panel" style={{ marginTop: 16 }}>
           <div className="panel-head">
-            <span className="eyebrow">Published · policy v{result.version}</span>
+            <span className="panel-title">Published · policy v{result.version}</span>
             <span className="chip mono">
               {result.fingerprint.before} → {result.fingerprint.after}
             </span>
@@ -127,7 +128,7 @@ export default function Profiles() {
       )}
 
       <section className="panel" style={{ marginTop: 16 }}>
-        <div className="panel-head"><span className="eyebrow">Why the compiler refuses things</span></div>
+        <div className="panel-head"><span className="panel-title">Why the compiler refuses things</span></div>
         <div className="panel-body">
           <p style={{ color: 'var(--text-dim)', marginBottom: 12 }}>
             Validation happens once, when a policy is authored — never on the hot path. A typo is a

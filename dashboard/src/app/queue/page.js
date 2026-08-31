@@ -42,7 +42,8 @@ export default function Review() {
 
   return (
     <>
-      <h1 className="title">Where a human is worth interrupting</h1>
+      <span className="eyebrow">Where a human is worth interrupting</span>
+      <h1 className="title">Review</h1>
       <p className="lede">
         Not on every flag — on the middle of the confidence range, and only where the harm cannot
         be undone. A reversible finding with evidence gets shown to the reader instead, which is
@@ -76,7 +77,7 @@ export default function Review() {
 
       <section className="panel">
         <div className="panel-head">
-          <span className="eyebrow">Pending</span>
+          <span className="panel-title">Pending</span>
           <span className="chip mono">no prompt, no response, no user — references only</span>
         </div>
         {pending.length === 0 ? (
@@ -123,7 +124,7 @@ export default function Review() {
       {last && (
         <section className="panel" style={{ marginTop: 16 }}>
           <div className="panel-head">
-            <span className="eyebrow">What the evidence now supports</span>
+            <span className="panel-title">What the evidence now supports</span>
             <span className="chip mono">needs {last.min_evidence} independent reviews</span>
           </div>
           <div className="panel-body">
@@ -150,7 +151,7 @@ export default function Review() {
                   </tbody>
                 </table>
                 <div className="composer-row" style={{ marginTop: 12 }}>
-                  <button className="btn btn-primary" onClick={apply} disabled={busy}>
+                  <button className="btn btn-violet" onClick={apply} disabled={busy}>
                     Recompile and publish
                   </button>
                   <span className="chip mono">writes its own diff to the audit chain</span>
@@ -164,7 +165,7 @@ export default function Review() {
       {applied && (
         <section className="panel" style={{ marginTop: 16 }}>
           <div className="panel-head">
-            <span className="eyebrow">Published · policy v{applied.version}</span>
+            <span className="panel-title">Published · policy v{applied.version}</span>
           </div>
           <div className="panel-body">
             <pre className="dump">{JSON.stringify(applied.applied, null, 2)}</pre>

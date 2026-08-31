@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Outfit:wght@600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+  body{margin:0;background:#DCDFE6;font-family:'Plus Jakarta Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:#2563EB}
+  a:hover{color:#1d4fd1}
+</style>
+</helmet>
+
+<div style="display:flex;flex-direction:column;align-items:center;gap:56px;padding:56px 0 96px">
+
+<div style="display:flex;flex-direction:column;gap:14px">
+  <div style="align-self:flex-start;font-size:12px;font-weight:600;letter-spacing:.04em;color:#8A91A0;text-transform:uppercase">01 &nbsp;·&nbsp; Transit</div>
+  <div style="width:1600px;background:#F1F3F7;border-radius:28px;box-shadow:0 24px 70px rgba(17,19,24,.14);display:flex;padding:28px;gap:0">
+    <dc-import name="IconRail" active="transit" hint-size="80,900" style="align-self:flex-start"></dc-import>
+    <div style="flex:1;display:flex;flex-direction:column;gap:22px;padding-left:28px;min-width:0">
+
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:15px;color:#8A91A0;margin-bottom:8px">Watch one request cross the line</div>
+          <div style="font-family:'Outfit',sans-serif;font-size:52px;font-weight:700;letter-spacing:-0.02em;color:#111318;line-height:1">Transit</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <div style="display:flex;background:#fff;border-radius:999px;padding:4px;gap:2px;box-shadow:0 2px 20px rgba(17,19,24,.05)">
+            <div style="padding:9px 18px;border-radius:999px;background:#111318;color:#fff;font-size:13px;font-weight:600">Live</div>
+            <div style="padding:9px 18px;border-radius:999px;color:#3F4552;font-size:13px;font-weight:600">Audit</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;background:#fff;border-radius:999px;padding:11px 20px;min-width:250px;box-shadow:0 2px 20px rgba(17,19,24,.05)">
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="#8A91A0" stroke-width="1.4"></circle><path d="M10.3 10.3L13 13" stroke="#8A91A0" stroke-width="1.4" stroke-linecap="round"></path></svg>
+            <span style="font-size:13px;color:#8A91A0">Search request ID, hash, entity…</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:14px">
+        <sc-for list="{{ scenarios }}" as="sc" hint-placeholder-count="5">
+          <div style="flex:1;background:{{ sc.bg }};border:1px solid {{ sc.border }};border-radius:20px;padding:16px 18px;box-shadow:0 2px 20px rgba(17,19,24,.05);display:flex;flex-direction:column;gap:6px;min-width:0">
+            <div style="font-size:14px;font-weight:700;color:#111318">{{ sc.name }}</div>
+            <div style="font-size:12px;color:#8A91A0;line-height:1.4">{{ sc.subtitle }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="background:#fff;border-radius:16px;border:1px solid #E7EAF0;padding:20px 22px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.7;color:#3F4552;height:150px;overflow:hidden">Customer Priya Sharma (priya.sharma@example.com, account 45230) is asking why her claim was delayed. Summarize the review notes and give her a clear next step.</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #E7EAF0;border-radius:999px;padding:10px 18px;font-size:13px;color:#3F4552;font-weight:600">internal-knowledge
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style="margin-left:2px"><path d="M2 3.5L5 6.5L8 3.5" stroke="#8A91A0" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </div>
+        <div style="background:#111318;color:#fff;border-radius:999px;padding:10px 22px;font-size:13px;font-weight:600">Send request</div>
+        <div style="flex:1"></div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8A91A0;background:#fff;border:1px solid #E7EAF0;border-radius:999px;padding:8px 14px">fp c1b31dfccac9a48f · policy v1</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8A91A0;background:#fff;border:1px solid #E7EAF0;border-radius:999px;padding:8px 14px">interactive · commit at 40 tok / 250ms · hold 50 chars</div>
+      </div>
+
+      <div style="background:#fff;border-radius:28px;box-shadow:0 2px 20px rgba(17,19,24,.05);overflow:hidden;position:relative">
+        <div style="position:absolute;left:50%;top:0;bottom:0;width:22px;transform:translateX(-50%);background:linear-gradient(180deg,rgba(249,115,22,.14),rgba(124,58,237,.1) 50%,rgba(37,99,235,.14));z-index:1"></div>
+        <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(180deg);writing-mode:vertical-rl;z-index:2;font-size:10px;font-weight:700;letter-spacing:.12em;color:#7C3AED;white-space:nowrap">CONTROLPLANE</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr">
+          <div style="padding:22px 32px 16px;font-size:13px;font-weight:700;letter-spacing:.04em;color:#F97316">INSIDE THE BUILDING</div>
+          <div style="padding:22px 32px 16px;display:flex;align-items:center;justify-content:space-between;border-left:1px solid #E7EAF0">
+            <span style="font-size:13px;font-weight:700;letter-spacing:.04em;color:#2563EB">OUTSIDE · THE MODEL PROVIDER</span>
+            <span style="background:#E7F6EC;color:#16A34A;font-size:12px;font-weight:600;border-radius:999px;padding:6px 12px">✓ leak check · 0 of 2 real values present</span>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #E7EAF0">
+          <div style="padding:24px 32px;border-right:1px solid #E7EAF0">
+            <div style="font-size:12px;font-weight:700;color:#8A91A0;letter-spacing:.03em;margin-bottom:12px">01 &nbsp; WHAT YOU SENT</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.7;color:#3F4552;margin-bottom:16px">Customer <span style="background:#FFF1E6;color:#F97316;border-radius:4px;padding:1px 4px">Priya Sharma</span> (<span style="background:#FFF1E6;color:#F97316;border-radius:4px;padding:1px 4px">priya.sharma@example.com</span>, account 45230) is asking why her claim was delayed.</div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3F4552;display:flex;align-items:center;gap:8px"><span style="width:6px;height:6px;border-radius:50%;background:#F97316;flex:none"></span>customer_name — matched customer:44219 — 1.00</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3F4552;display:flex;align-items:center;gap:8px"><span style="width:6px;height:6px;border-radius:50%;background:#F97316;flex:none"></span>email — matched customer:44219 — 1.00</div>
+            </div>
+          </div>
+          <div style="padding:24px 32px">
+            <div style="font-size:12px;font-weight:700;color:#8A91A0;letter-spacing:.03em;margin-bottom:12px">02 &nbsp; WHAT THE PROVIDER RECEIVED</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.7;color:#3F4552">Customer <span style="background:#E8EFFD;color:#2563EB;border-radius:4px;padding:1px 4px">[[CUST_A]]</span> (<span style="background:#E8EFFD;color:#2563EB;border-radius:4px;padding:1px 4px">[[EMAIL_A]]</span>, account 45230) is asking why her claim was delayed.</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #E7EAF0">
+          <div style="padding:24px 32px;border-right:1px solid #E7EAF0;order:2">
+            <div style="font-size:12px;font-weight:700;color:#8A91A0;letter-spacing:.03em;margin-bottom:12px">04 &nbsp; WHAT YOU READ</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.7;color:#3F4552;margin-bottom:14px">Priya's claim (account 45230) was held for a manual review of <span style="background:#FFF1E6;color:#F97316;border-radius:4px;padding:1px 4px">priya.sharma@example.com</span>'s documents; the adjuster will follow up within two business days.</div>
+            <div style="background:#E7F6EC;color:#16A34A;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:600;display:inline-block">✓ 2 values restored · 0 unrestored</div>
+          </div>
+          <div style="padding:24px 32px;order:1">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+              <div style="font-size:12px;font-weight:700;color:#8A91A0;letter-spacing:.03em">03 &nbsp; WHAT THE MODEL WROTE</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#2563EB;background:#E8EFFD;border-radius:999px;padding:4px 10px">commit 11 · flush</div>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.7;color:#3F4552">[[CUST_A]]'s claim (account 45230) was held for a manual review of <span style="background:#E8EFFD;color:#2563EB;border-radius:4px;padding:1px 4px">[[EMAIL_A]]</span>'s documents; the adjuster will follow up within two business days.</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:20px">
+        <div style="flex:1;background:rgba(22,163,74,.13);border-radius:24px;box-shadow:0 2px 20px rgba(17,19,24,.05);padding:24px 26px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <div style="font-size:16px;font-weight:700;color:#16A34A">Decision</div>
+            <div style="background:#E7F6EC;color:#16A34A;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;text-transform:uppercase">allow</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#3F4552">
+            <div>customer_name — mitigated by substitution — allow</div>
+            <div>email — mitigated by substitution — allow</div>
+          </div>
+        </div>
+        <div style="flex:1;background:rgba(245,158,11,.13);border-radius:24px;box-shadow:0 2px 20px rgba(17,19,24,.05);padding:24px 26px">
+          <div style="font-size:16px;font-weight:700;color:#F59E0B;margin-bottom:14px">After delivery · reversible harms</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#111318;font-weight:600">entity_not_in_source</div>
+            <div style="background:#FEF3C7;color:#F59E0B;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;text-transform:uppercase">annotate</div>
+          </div>
+          <div style="font-size:13px;color:#3F4552;line-height:1.5;margin-bottom:10px">Account 45230 does not appear in the source ticket — provenance could not be confirmed.</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8A91A0;line-height:1.7">confidence 0.65 = min(0.9, 0.55 + 0.1 × entities_without_provenance)<br>arrived 0ms after the reader had the answer</div>
+        </div>
+        <div style="flex:1;background:rgba(56,189,248,.13);border-radius:24px;box-shadow:0 2px 20px rgba(17,19,24,.05);padding:24px 26px">
+          <div style="font-size:16px;font-weight:700;color:#111318;margin-bottom:16px">Cost of this request</div>
+          <div style="display:flex;gap:24px">
+            <div><div style="font-size:36px;font-weight:700;color:#111318">₹0.0365</div><div style="font-size:12px;color:#8A91A0;margin-top:4px">what we paid, routed</div></div>
+            <div><div style="font-size:36px;font-weight:700;color:#38BDF8">₹0.1818</div><div style="font-size:12px;color:#8A91A0;margin-top:4px">baseline · claude-opus-5</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#fff;border-radius:24px;box-shadow:0 2px 20px rgba(17,19,24,.05);padding:20px 26px 8px">
+        <div style="font-size:16px;font-weight:700;color:#111318;margin-bottom:8px">The tape</div>
+        <div style="display:grid;grid-template-columns:70px 50px 140px 1fr;font-size:11px;color:#8A91A0;font-weight:600;padding:8px 0;border-bottom:1px solid #E7EAF0">
+          <div>ELAPSED</div><div>SEQ</div><div>STAGE</div><div>DETAIL</div>
+        </div>
+        <sc-for list="{{ tape }}" as="row" hint-placeholder-count="10">
+          <div style="display:grid;grid-template-columns:70px 50px 140px 1fr;align-items:center;height:28px;border-bottom:1px solid #E7EAF0;font-family:'JetBrains Mono',monospace;font-size:12px">
+            <div style="color:#8A91A0">{{ row.ms }}</div>
+            <div style="color:#8A91A0">{{ row.seq }}</div>
+            <div style="color:{{ row.color }};font-weight:600">{{ row.stage }}</div>
+            <div style="color:#3F4552">{{ row.detail }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:14px">
+  <div style="align-self:flex-start;font-size:12px;font-weight:600;letter-spacing:.04em;color:#8A91A0;text-transform:uppercase">02 &nbsp;·&nbsp; Profiles</div>
+  <div style="width:1600px;background:#F1F3F7;border-radius:28px;box-shadow:0 24px 70px rgba(17,19,24,.14);display:flex;padding:28px">
+    <dc-import name="IconRail" active="profiles" hint-size="80,900" style="align-self:flex-start"></dc-import>
+    <div style="flex:1;display:flex;flex-direction:column;gap:22px;padding-left:28px;min-width:0">
+      <div>
+        <div style="font-size:15px;color:#8A91A0;margin-bottom:8px">Three use cases, three policies, one checkpoint</div>
+        <div style="font-family:'Outfit',sans-serif;font-size:52px;font-weight:700;letter-spacing:-0.02em;color:#111318;line-height:1">Profiles</div>
+      </div>
+
+      <div style="display:flex;gap:20px">
+        <sc-for list="{{ profileCards }}" as="p" hint-placeholder-count="3">
+          <div style="flex:1;background:{{ p.tint }};border-radius:28px;box-shadow:0 2px 20px rgba(17,19,24,.05);padding:26px 26px 20px;display:flex;flex-direction:column;gap:14px">
+            <div>
+              <div style="font-size:18px;font-weight:700;color:#111318;margin-bottom:6px">{{ p.name }}</div>
+              <div style="font-size:13px;color:#8A91A0;line-height:1.5">{{ p.desc }}</div>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8A91A0;background:#F1F3F7;border-radius:999px;padding:6px 12px;align-self:flex-start">{{ p.fp }}</div>
+            <div style="display:flex;flex-direction:column;gap:9px;border-top:1px solid #E7EAF0;padding-top:14px">
+              <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="5">
+                <div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:#8A91A0">{{ r.k }}</span><span style="color:#3F4552;font-weight:600">{{ r.v }}</span></div>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:4px">
+              <div style="background:#fff;border:1px solid #E7EAF0;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:600;color:#3F4552">Tighten by 0.15</div>
+              <div style="background:#fff;border:1px solid #E7EAF0;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:600;color:#3F4552">Switch to throughput</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="background:#fff;border-radius:24px;box-shadow:0 2px 20px rgba(17,19,24,.05);padding:22px 26px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8A91A0;margin-bottom:14px">fingerprint c1b31dfc… → 8e02a4b1…</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;font-size:11px;font-weight:700;color:#8A91A0;letter-spacing:.03em;padding-bottom:8px;border-bottom:1px solid #E7EAF0">
+          <div>PATH</div><div>WAS</div><div>NOW</div>
+        </div>
+        <sc-for list="{{ diffRows }}" as="d" hint-placeholder-count="4">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;font-family:'JetBrains Mono',monospace;font-size:12px;padding:10px 0;border-bottom:1px solid #E7EAF0;align-items:center">
+            <div style="color:#3F4552">{{ d.path }}</div><div style="color:#8A91A0">{{ d.was }}</div><div style="color:#F97316;font-weight:600">{{ d.now }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="background:#fff;border-radius:24px;box-shadow:0 2px 20px rgba(17,19,24,.05);padding:22px 26px">
+        <div style="font-size:16px;font-weight:700;color:#111318;margin-bottom:14px">Why the compiler refuses things</div>
+        <div style="display:flex;gap:10px;margin-bottom:14px">
+          <div style="border:1px solid #DC2626;color:#DC2626;border-radius:999px;padding:9px 16px;font-size:12px;font-weight:600">Exempt credentials</div>
+          <div style="border:1px solid #DC2626;color:#DC2626;border-radius:999px;padding:9px 16px;font-size:12px;font-weight:600">Disable canary sampling</div>
+          <div style="border:1px solid #DC2626;color:#DC2626;border-radius:999px;padding:9px 16px;font-size:12px;font-weight:600">Skip the review band</div>
+        </div>
+        <div style="background:#FEE9E9;color:#DC2626;border-radius:14px;padding:14px 18px;font-family:'JetBrains Mono',monospace;font-size:12px">internal-knowledge: credentials cannot be exempted — blocking them is not a tunable</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:14px">
+  <div style="align-self:flex-start;font-size:12px;font-weight:600;letter-spacing:.04em;color:#8A91A0;text-transform:uppercase">03 &nbsp;·&nbsp; Review</div>
+  <div style="width:1600px;background:#F1F3F7;border-radius:28px;box-shadow:0 24px 70px rgba(17,19,24,.14);display:flex;padding:28px">
+    <dc-import name="IconRail" active="review" hint-size="80,900" style="align-self:flex-start"></dc-import>
+    <div style="flex:1;display:flex;flex-direction:column;gap:22px;padding-left:28px;min-width:0">
+      <div>
+        <div style="font-size:15px;color:#8A91A0;margin-bottom:8px">Where a human is worth interrupting</div>
+        <div style="font-family:'Outfit',sans-serif;font-size:52px;font-weight:700;letter-spacing:-0.02em;color:#111318;line-height:1">Review</div>
+      </div>
+
+      <div style="display:flex;gap:20px">
+        <sc-for list="{{ reviewStats }}" as="s" hint-placeholder-count="3">
+          <div style="flex:1;background:{{ s.tint }};border-radius:24px;box-shadow:0 2px 20px rgba(17,19,24,.05);padding:26px">
+            <div style="font-size:40px;font-weight:700;color:{{ s.color }}">{{ s.value }}</div>
+            <div style="font-size:13px;color:#3F4552;margin-top:6px">{{ s.label }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="background:#fff;border-radius:24px;box-shadow:0 2px 20px rgba(17,19,24,.05);padding:24px 26px">
+        <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr .8fr 1.6fr 1.6fr;font-size:11px;font-weight:700;color:#8A91A0;letter-spacing:.03em;padding-bottom:10px;border-bottom:1px solid #E7EAF0">
+          <div>ITEM</div><div>PROFILE</div><div>CATEGORY</div><div>CONF.</div><div>WHY YOU</div><div>VERDICT</div>
+        </div>
+        <sc-for list="{{ reviewRows }}" as="r" hint-placeholder-count="3">
+          <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr .8fr 1.6fr 1.6fr;align-items:center;padding:14px 0;border-bottom:1px solid #E7EAF0;font-size:13px">
+            <div style="font-family:'JetBrains Mono',monospace;color:#111318;font-weight:600">{{ r.item }}</div>
+            <div style="color:#3F4552">{{ r.profile }}</div>
+            <div style="color:#3F4552">{{ r.category }}</div>
+            <div style="color:#3F4552">{{ r.confidence }}</div>
+            <div style="color:#8A91A0;font-size:12px">{{ r.why }}</div>
+            <div style="display:flex;gap:6px">
+              <div style="background:#F1F3F7;border-radius:999px;padding:6px 10px;font-size:11px;font-weight:600;color:#3F4552">Right to flag</div>
+              <div style="background:#F1F3F7;border-radius:999px;padding:6px 10px;font-size:11px;font-weight:600;color:#3F4552">False positive</div>
+              <div style="background:#F1F3F7;border-radius:999px;padding:6px 10px;font-size:11px;font-weight:600;color:#3F4552">Unclear</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="background:#fff;border-radius:24px;box-shadow:0 2px 20px rgba(17,19,24,.05);padding:24px 26px">
+        <div style="font-size:16px;font-weight:700;color:#111318;margin-bottom:14px">Proposal</div>
+        <div style="display:grid;grid-template-columns:1.2fr 1.6fr 1.6fr 2fr;font-size:11px;font-weight:700;color:#8A91A0;letter-spacing:.03em;padding-bottom:10px;border-bottom:1px solid #E7EAF0">
+          <div>PROFILE</div><div>PATH</div><div>PROPOSED</div><div>BECAUSE</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1.2fr 1.6fr 1.6fr 2fr;align-items:center;padding:14px 0;font-family:'JetBrains Mono',monospace;font-size:12px">
+          <div style="color:#111318;font-weight:600">decision-support</div>
+          <div style="color:#3F4552">decision.exempt</div>
+          <div style="color:#F97316">["quality:hallucination"]</div>
+          <div style="color:#3F4552">3 of 3 reviews overturned</div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:6px">
+          <div style="background:#7C3AED;color:#fff;border-radius:999px;padding:11px 22px;font-size:13px;font-weight:600">Recompile and publish</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:14px">
+  <div style="align-self:flex-start;font-size:12px;font-weight:600;letter-spacing:.04em;color:#8A91A0;text-transform:uppercase">04 &nbsp;·&nbsp; Chain</div>
+  <div style="width:1600px;background:#F1F3F7;border-radius:28px;box-shadow:0 24px 70px rgba(17,19,24,.14);display:flex;padding:28px">
+    <dc-import name="IconRail" active="chain" hint-size="80,900" style="align-self:flex-start"></dc-import>
+    <div style="flex:1;display:flex;flex-direction:column;gap:22px;padding-left:28px;min-width:0">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:15px;color:#8A91A0;margin-bottom:8px">The log that cannot be quietly rewritten</div>
+          <div style="font-family:'Outfit',sans-serif;font-size:52px;font-weight:700;letter-spacing:-0.02em;color:#111318;line-height:1">Chain</div>
+        </div>
+        <div style="display:flex;gap:10px">
+          <div style="background:#111318;color:#fff;border-radius:999px;padding:11px 20px;font-size:13px;font-weight:600">Verify the chain</div>
+          <div style="border:1px solid #DC2626;color:#DC2626;border-radius:999px;padding:11px 20px;font-size:13px;font-weight:600">Tamper with entry #0</div>
+        </div>
+      </div>
+
+      <div style="background:#E7F6EC;color:#16A34A;border-radius:16px;padding:14px 20px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600">✓ chain intact — 14 entries verified, genesis to head</div>
+
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <sc-for list="{{ chainEntries }}" as="e" hint-placeholder-count="4">
+          <div style="background:{{ e.tint }};border-radius:20px;box-shadow:0 2px 20px rgba(17,19,24,.05);padding:20px 24px;border-left:4px solid {{ e.edge }}">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+              <div style="font-size:14px;font-weight:700;color:#111318">#{{ e.seq }} &nbsp;{{ e.event }}</div>
+              <div style="font-size:12px;color:#8A91A0">{{ e.ts }}</div>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.7;margin-bottom:10px">
+              <div style="color:#8A91A0">prev &nbsp;{{ e.prev }}</div>
+              <div style="color:#2563EB">this &nbsp;{{ e.hash }}</div>
+            </div>
+            <div style="background:#F1F3F7;border-radius:10px;padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#3F4552;line-height:1.6">{{ e.json }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:14px">
+  <div style="align-self:flex-start;font-size:12px;font-weight:600;letter-spacing:.04em;color:#8A91A0;text-transform:uppercase">05 &nbsp;·&nbsp; Measures</div>
+  <div style="width:1600px;background:#F1F3F7;border-radius:28px;box-shadow:0 24px 70px rgba(17,19,24,.14);display:flex;padding:28px">
+    <dc-import name="IconRail" active="measures" hint-size="80,900" style="align-self:flex-start"></dc-import>
+    <div style="flex:1;display:flex;flex-direction:column;gap:22px;padding-left:28px;min-width:0">
+      <div>
+        <div style="font-size:15px;color:#8A91A0;margin-bottom:8px">The numbers, and what each of them cannot tell you</div>
+        <div style="font-family:'Outfit',sans-serif;font-size:52px;font-weight:700;letter-spacing:-0.02em;color:#111318;line-height:1">Measures</div>
+      </div>
+
+      <div style="background:#fff;border-radius:24px;box-shadow:0 2px 20px rgba(17,19,24,.05);padding:26px">
+        <div style="font-size:16px;font-weight:700;color:#111318;margin-bottom:16px">Canary</div>
+        <div style="display:flex;gap:32px;margin-bottom:20px">
+          <div><div style="font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:700;color:#16A34A">100.0%</div><div style="font-size:13px;color:#8A91A0;margin-top:4px">caught, of 80 seeded</div></div>
+          <div><div style="font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:700;color:#DC2626">0.0%</div><div style="font-size:13px;color:#8A91A0;margin-top:4px">estimated miss rate</div></div>
+          <div><div style="font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:700;color:#2563EB">95.4% – 100.0%</div><div style="font-size:13px;color:#8A91A0;margin-top:4px">95% Wilson interval</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-top:1px solid #E7EAF0;border-bottom:1px solid #E7EAF0;margin-bottom:16px">
+          <sc-for list="{{ canaryRows }}" as="c" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:12px;padding:16px 18px;border-right:1px solid #E7EAF0">
+              <div style="width:36px;height:36px;flex:none;border-radius:50%;background:conic-gradient(#16A34A 0deg {{ c.deg }}deg,#E7EAF0 {{ c.deg }}deg 360deg);mask:radial-gradient(farthest-side,transparent calc(100% - 6px),#000 calc(100% - 6px));-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 6px),#000 calc(100% - 6px))"></div>
+              <div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:#111318">{{ c.frac }}</div>
+                <div style="font-size:12px;color:#8A91A0;margin-top:2px">{{ c.cat }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="background:#FEF3C7;border-radius:14px;padding:14px 18px;font-size:12px;color:#7a5b06;line-height:1.5">Canary catch rate measures known, seeded patterns. It says nothing about entities the canary set does not contain.</div>
+      </div>
+
+      <div style="display:flex;gap:20px">
+        <div style="flex:1;background:#fff;border-radius:24px;box-shadow:0 2px 20px rgba(17,19,24,.05);padding:26px">
+          <div style="font-size:16px;font-weight:700;color:#111318;margin-bottom:16px">Cost</div>
+          <div style="display:flex;gap:28px;margin-bottom:14px">
+            <div><div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:#8A91A0">₹0.1818</div><div style="font-size:12px;color:#8A91A0;margin-top:4px">baseline</div></div>
+            <div><div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:#F97316">₹0.1453</div><div style="font-size:12px;color:#8A91A0;margin-top:4px">gross saving</div></div>
+            <div><div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:#16A34A">₹0.1336</div><div style="font-size:12px;color:#8A91A0;margin-top:4px">net saving</div></div>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#3F4552;background:#F1F3F7;border-radius:10px;padding:12px 14px">net saving = gross saving − checkpoint overhead (₹0.0116 / request)</div>
+        </div>
+        <div style="flex:1;background:#fff;border-radius:24px;box-shadow:0 2px 20px rgba(17,19,24,.05);padding:26px">
+          <div style="font-size:16px;font-weight:700;color:#111318;margin-bottom:14px">Bias</div>
+          <div style="background:#E8EFFD;color:#2563EB;border-radius:14px;padding:14px 18px;font-size:13px;line-height:1.5;margin-bottom:16px">There is no per-response bias score on this page and there never will be.</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <sc-for list="{{ biasPairs }}" as="b" hint-placeholder-count="3">
+              <div style="display:grid;grid-template-columns:1.4fr .6fr .6fr .6fr;align-items:center;font-size:12px;padding:8px 0;border-top:1px solid #E7EAF0">
+                <div style="font-family:'JetBrains Mono',monospace;color:#3F4552">{{ b.pair }}</div>
+                <div style="background:{{ b.aBg }};color:{{ b.aColor }};border-radius:999px;padding:4px 10px;font-weight:600;text-align:center">{{ b.a }}</div>
+                <div style="background:{{ b.bBg }};color:{{ b.bColor }};border-radius:999px;padding:4px 10px;font-weight:600;text-align:center">{{ b.b }}</div>
+                <div style="color:{{ b.divergedColor }};font-weight:600;text-align:center">{{ b.diverged }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:20px">
+        <div style="flex:1;background:#fff;border-radius:24px;box-shadow:0 2px 20px rgba(17,19,24,.05);padding:24px 26px;border-left:4px solid #16A34A">
+          <div style="font-size:15px;font-weight:700;color:#111318;margin-bottom:12px">Built · runs after delivery</div>
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;color:#3F4552">
+            <div>Entity-not-in-source detection</div>
+            <div>Canary sampling &amp; Wilson interval</div>
+            <div>Counterfactual pair testing</div>
+          </div>
+        </div>
+        <div style="flex:1;background:#fff;border-radius:24px;box-shadow:0 2px 20px rgba(17,19,24,.05);padding:24px 26px">
+          <div style="font-size:15px;font-weight:700;color:#111318;margin-bottom:12px">Not built · labelled, not omitted</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <div style="border:1px dashed #C7CCD6;color:#8A91A0;border-radius:999px;padding:6px 12px;font-size:12px">Per-response bias score</div>
+            <div style="border:1px dashed #C7CCD6;color:#8A91A0;border-radius:999px;padding:6px 12px;font-size:12px">Intent classification</div>
+            <div style="border:1px dashed #C7CCD6;color:#8A91A0;border-radius:999px;padding:6px 12px;font-size:12px">Real-time human review queue</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:14px">
+  <div style="align-self:flex-start;font-size:12px;font-weight:600;letter-spacing:.04em;color:#8A91A0;text-transform:uppercase">Token sheet</div>
+  <div style="width:1600px;background:#F1F3F7;border-radius:28px;box-shadow:0 24px 70px rgba(17,19,24,.14);padding:40px;display:flex;flex-direction:column;gap:32px">
+    <div style="display:flex;gap:20px;flex-wrap:wrap">
+      <sc-for list="{{ palette }}" as="c" hint-placeholder-count="9">
+        <div style="width:168px;display:flex;flex-direction:column;gap:8px">
+          <div style="height:64px;border-radius:16px;background:{{ c.hex }};border:{{ c.border }}"></div>
+          <div style="font-size:12px;font-weight:600;color:#111318">{{ c.name }}</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8A91A0">{{ c.hex }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;gap:40px">
+      <div style="flex:1;background:#fff;border-radius:24px;padding:26px;box-shadow:0 2px 20px rgba(17,19,24,.05)">
+        <div style="font-size:14px;font-weight:700;color:#111318;margin-bottom:16px">Type scale</div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div style="font-size:52px;font-weight:700;letter-spacing:-.02em;color:#111318">Page title 52</div>
+          <div style="font-size:20px;font-weight:600;color:#111318">Card title 20</div>
+          <div style="font-size:15px;color:#3F4552">Body 15</div>
+          <div style="font-size:13px;color:#8A91A0">Label / caption 13</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#3F4552">Wire content, JetBrains Mono 14</div>
+        </div>
+      </div>
+      <div style="flex:1;background:#fff;border-radius:24px;padding:26px;box-shadow:0 2px 20px rgba(17,19,24,.05)">
+        <div style="font-size:14px;font-weight:700;color:#111318;margin-bottom:16px">Shape</div>
+        <div style="display:flex;gap:16px;align-items:center;margin-bottom:16px">
+          <div style="width:90px;height:64px;background:#F1F3F7;border-radius:28px;box-shadow:0 2px 20px rgba(17,19,24,.05)"></div>
+          <div style="font-size:12px;color:#8A91A0">Card · 28px radius, no border, soft shadow</div>
+        </div>
+        <div style="display:flex;gap:16px;align-items:center;margin-bottom:16px">
+          <div style="background:#111318;color:#fff;border-radius:999px;padding:10px 20px;font-size:12px;font-weight:600">Pill</div>
+          <div style="font-size:12px;color:#8A91A0">Buttons &amp; chips · fully rounded</div>
+        </div>
+        <div style="display:flex;gap:16px;align-items:center">
+          <div style="width:44px;height:44px;border-radius:50%;background:#fff;border:1px solid #E7EAF0"></div>
+          <div style="font-size:12px;color:#8A91A0">Icon button · 44px circle, hairline</div>
+        </div>
+      </div>
+      <div style="flex:1;background:#fff;border-radius:24px;padding:26px;box-shadow:0 2px 20px rgba(17,19,24,.05)">
+        <div style="font-size:14px;font-weight:700;color:#111318;margin-bottom:16px">State chips</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="background:#E7F6EC;color:#16A34A;border-radius:999px;padding:7px 14px;font-size:12px;font-weight:700;text-transform:uppercase;align-self:flex-start">allow</div>
+          <div style="background:#FEF3C7;color:#F59E0B;border-radius:999px;padding:7px 14px;font-size:12px;font-weight:700;text-transform:uppercase;align-self:flex-start">annotate</div>
+          <div style="background:#E8EFFD;color:#2563EB;border-radius:999px;padding:7px 14px;font-size:12px;font-weight:700;text-transform:uppercase;align-self:flex-start">review</div>
+          <div style="background:#FEE9E9;color:#DC2626;border-radius:999px;padding:7px 14px;font-size:12px;font-weight:700;text-transform:uppercase;align-self:flex-start">block</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const scenarios = [
+      { name: 'The round trip', subtitle: 'Substitution, not redaction — and the number survives it', selected: true },
+      { name: 'The credential', subtitle: 'A credential in the clear — blocked before it leaves', selected: false },
+      { name: 'The landmine', subtitle: 'A finding that only exists after the model answers', selected: false },
+      { name: 'The edge of governance', subtitle: 'Confidence 0.35–0.75 — held for a human, not a machine', selected: false },
+      { name: 'The same finding, a stricter route', subtitle: 'Same entity, tighter policy — annotate becomes block', selected: false }
+    ].map(s => ({ ...s, bg: s.selected ? '#FFF1E6' : '#FFFFFF', border: s.selected ? '#F97316' : '#F1F3F7' }));
+
+    const tape = [
+      { ms: '0', seq: '01', stage: 'request.received', detail: 'internal-knowledge · fp c1b31dfc', color: '#3F4552' },
+      { ms: '2', seq: '02', stage: 'scan.entities', detail: '2 findings — customer_name, email', color: '#F97316' },
+      { ms: '3', seq: '03', stage: 'substitute', detail: '[[CUST_A]] · [[EMAIL_A]] minted', color: '#F97316' },
+      { ms: '4', seq: '04', stage: 'decision.allow', detail: 'both mitigated by substitution', color: '#3F4552' },
+      { ms: '5', seq: '05', stage: 'forward.provider', detail: 'account 45230 crosses unchanged', color: '#2563EB' },
+      { ms: '212', seq: '06', stage: 'stream.commit', detail: 'commit 1 · 40 tokens', color: '#2563EB' },
+      { ms: '461', seq: '07', stage: 'stream.commit', detail: 'commit 11 · flush', color: '#2563EB' },
+      { ms: '463', seq: '08', stage: 'restore', detail: '[[CUST_A]] → Priya Sharma, [[EMAIL_A]] → priya.sharma@example.com', color: '#F97316' },
+      { ms: '463', seq: '09', stage: 'leak_check', detail: '0 of 2 real values present outside', color: '#16A34A' },
+      { ms: '463', seq: '10', stage: 'deliver', detail: 'response returned to caller', color: '#3F4552' },
+      { ms: '463', seq: '11', stage: 'after_delivery.scan', detail: 'entity_not_in_source — annotate', color: '#F59E0B' }
+    ];
+
+    const profileCards = [
+      { name: 'customer-support', tint: 'rgba(37,99,235,.06)', desc: 'Fast, forgiving — optimized for throughput over a stream of routine requests.', fp: 'fp a3f9e1c2b0d4', rows: [
+        { k: 'blocks at confidence', v: '0.85' }, { k: 'review band', v: '0.55 – 0.85' }, { k: 'flag budget / 100', v: '12' }, { k: 'mode', v: 'streaming interactive' }, { k: 'hold window', v: '30 chars' }
+      ] },
+      { name: 'decision-support', tint: 'rgba(124,58,237,.06)', desc: 'Balanced — used where a wrong answer changes what a human decides.', fp: 'fp c1b31dfccac9', rows: [
+        { k: 'blocks at confidence', v: '0.75' }, { k: 'review band', v: '0.35 – 0.75' }, { k: 'flag budget / 100', v: '5' }, { k: 'mode', v: 'streaming interactive' }, { k: 'hold window', v: '50 chars' }
+      ] },
+      { name: 'internal-knowledge', tint: 'rgba(249,115,22,.06)', desc: 'Strictest — internal documents, credentials never exempted.', fp: 'fp 8e02a4b1f7c3', rows: [
+        { k: 'blocks at confidence', v: '0.65' }, { k: 'review band', v: '0.30 – 0.65' }, { k: 'flag budget / 100', v: '2' }, { k: 'mode', v: 'streaming interactive' }, { k: 'hold window', v: '50 chars' }
+      ] }
+    ];
+
+    const diffRows = [
+      { path: 'decision.block_at', was: '0.85', now: '0.70' },
+      { path: 'review.band_low', was: '0.55', now: '0.40' },
+      { path: 'flags.budget_per_100', was: '12', now: '5' },
+      { path: 'stream.hold_chars', was: '30', now: '45' }
+    ];
+
+    const reviewStats = [
+      { value: '3', label: 'awaiting a verdict', tint: 'rgba(37,99,235,.08)', color: '#2563EB' },
+      { value: '100.0%', label: 'override rate — the number we look worst on, shown first', tint: 'rgba(220,38,38,.07)', color: '#DC2626' },
+      { value: '0', label: 'resolved this session', tint: 'rgba(22,163,74,.08)', color: '#16A34A' }
+    ];
+    const reviewRows = [
+      { item: 'req_88213', profile: 'decision-support', category: 'quality:hallucination', confidence: '0.61', why: 'Confidence fell inside the review band' },
+      { item: 'req_88220', profile: 'decision-support', category: 'quality:hallucination', confidence: '0.58', why: 'Confidence fell inside the review band' },
+      { item: 'req_88241', profile: 'internal-knowledge', category: 'entity_not_in_source', confidence: '0.65', why: 'No provenance for a named entity' }
+    ];
+
+    const chainEntries = [
+      { seq: '13', event: 'decision.allow', ts: '14:02:11.481', prev: '9f0a…c31e', hash: '4b7d…88a2', edge: '#16A34A', tint: 'rgba(22,163,74,.06)', json: '{"profile":"internal-knowledge","findings":2,"verdict":"allow"}' },
+      { seq: '12', event: 'review.overturn', ts: '13:58:02.114', prev: '2c88…f01b', hash: '9f0a…c31e', edge: '#7C3AED', tint: 'rgba(124,58,237,.06)', json: '{"item":"req_88213","from":"annotate","to":"dismiss"}' },
+      { seq: '11', event: 'policy.compile', ts: '13:40:55.902', prev: '77ab…4de9', hash: '2c88…f01b', edge: '#2563EB', tint: 'rgba(37,99,235,.06)', json: '{"fingerprint":"c1b31dfc…→8e02a4b1…","author":"review-board"}' },
+      { seq: '10', event: 'canary.sample', ts: '13:12:40.220', prev: '01e4…a930', hash: '77ab…4de9', edge: '#F97316', tint: 'rgba(249,115,22,.06)', json: '{"seeded":80,"caught":80,"category":"payment_card"}' }
+    ];
+
+    const canaryRows = [
+      { cat: 'aadhaar', frac: '10/10', deg: 360 }, { cat: 'api_key', frac: '20/20', deg: 360 }, { cat: 'iban', frac: '10/10', deg: 360 }, { cat: 'payment_card', frac: '40/40', deg: 360 }
+    ];
+
+    const biasPairs = [
+      { pair: 'Rajesh Kumar → Rebecca Klein', a: 'allow', aBg: '#E7F6EC', aColor: '#16A34A', b: 'allow', bBg: '#E7F6EC', bColor: '#16A34A', diverged: 'no', divergedColor: '#8A91A0' },
+      { pair: 'Fatima Al-Sayed → Fiona Adler', a: 'review', aBg: '#E8EFFD', aColor: '#2563EB', b: 'allow', bBg: '#E7F6EC', bColor: '#16A34A', diverged: 'yes', divergedColor: '#DC2626' },
+      { pair: 'Wei Zhang → William Zane', a: 'allow', aBg: '#E7F6EC', aColor: '#16A34A', b: 'allow', bBg: '#E7F6EC', bColor: '#16A34A', diverged: 'no', divergedColor: '#8A91A0' }
+    ];
+
+    const palette = [
+      { name: 'Page background', hex: '#F1F3F7', border: '1px solid #E7EAF0' },
+      { name: 'Surface', hex: '#FFFFFF', border: '1px solid #E7EAF0' },
+      { name: 'Ink', hex: '#111318', border: 'none' },
+      { name: 'Body text', hex: '#3F4552', border: 'none' },
+      { name: 'Muted text', hex: '#8A91A0', border: 'none' },
+      { name: 'Warm / inside', hex: '#F97316', border: 'none' },
+      { name: 'Cool / outside', hex: '#2563EB', border: 'none' },
+      { name: 'Amber / holding', hex: '#F59E0B', border: 'none' },
+      { name: 'Red / stopped', hex: '#DC2626', border: 'none' },
+      { name: 'Green / verified', hex: '#16A34A', border: 'none' },
+      { name: 'Violet', hex: '#7C3AED', border: 'none' }
+    ];
+
+    return { scenarios, tape, profileCards, diffRows, reviewStats, reviewRows, chainEntries, canaryRows, biasPairs, palette };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,20 +1,12 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { get } from '@/lib/api';
 
-const LINKS = [
-  ['/', 'Transit'],
-  ['/policy', 'Profiles'],
-  ['/queue', 'Review'],
-  ['/verify', 'Chain'],
-  ['/trust', 'Measures'],
-];
-
+/* Just the health strip now - the Rail owns navigation between pages, so
+ * this keeps only the thing that isn't a link: whether the backend and the
+ * local model are actually reachable, checked live rather than assumed. */
 export default function Nav() {
-  const path = usePathname();
   const [health, setHealth] = useState(null);
   const [err, setErr] = useState(null);
 
@@ -27,14 +19,6 @@ export default function Nav() {
   return (
     <header className="topbar">
       <span className="brand">ControlPlane</span>
-
-      <nav className="nav">
-        {LINKS.map(([href, label]) => (
-          <Link key={href} href={href} data-active={path === href}>
-            {label}
-          </Link>
-        ))}
-      </nav>
 
       <div className="status">
         {err ? (

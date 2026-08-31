@@ -32,9 +32,19 @@ export default function Chain() {
   const entries = chain?.entries ?? [];
   const broken = check && !check.ok ? check.broken_at : null;
 
+  // A light per-event accent, so a long chain reads at a glance rather than
+  // as a wall of identical cards. Only two events exist today (`scan`,
+  // `policy_change`) - the map is small on purpose and easy to extend.
+  const ACCENT = {
+    scan: { edge: '#2563EB', tint: 'rgba(37, 99, 235, 0.05)' },
+    policy_change: { edge: '#7C3AED', tint: 'rgba(124, 58, 237, 0.05)' },
+  };
+  const accentFor = (event) => ACCENT[event] ?? { edge: '#8A91A0', tint: 'transparent' };
+
   return (
     <>
-      <h1 className="title">The log that cannot be quietly rewritten</h1>
+      <span className="eyebrow">The log that cannot be quietly rewritten</span>
+      <h1 className="title">Chain</h1>
       <p className="lede">
         Every entry hashes its own contents together with the hash before it. Edit anything,
         anywhere, and every hash after it disagrees. Note what is <strong>absent</strong> from the
@@ -79,29 +89,32 @@ export default function Chain() {
         </section>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {entries.map((e) => (
-            <section className="panel" key={e.seq}
-              style={broken !== null && e.seq >= broken
-                ? { borderColor: 'rgba(210,84,74,0.5)' } : undefined}>
-              <div className="panel-head">
-                <span className="eyebrow">
-                  #{e.seq} · {e.event}
-                  {broken !== null && e.seq === broken && ' · contents altered'}
-                  {broken !== null && e.seq > broken && ' · unprovable from here'}
-                </span>
-                <span className="chip mono">{e.timestamp}</span>
-              </div>
-              <div className="panel-body">
-                <div className="hash" style={{ marginBottom: 4 }}>
-                  prev {e.prev_hash}
+          {entries.map((e) => {
+            const isBroken = broken !== null && e.seq >= broken;
+            const accent = isBroken ? { edge: '#DC2626', tint: 'rgba(220, 38, 38, 0.06)' } : accentFor(e.event);
+            return (
+              <section className="panel" key={e.seq}
+                style={{ background: accent.tint, borderLeft: `4px solid ${accent.edge}` }}>
+                <div className="panel-head">
+                  <span className="panel-title">
+                    #{e.seq} · {e.event}
+                    {broken !== null && e.seq === broken && ' · contents altered'}
+                    {broken !== null && e.seq > broken && ' · unprovable from here'}
+                  </span>
+                  <span className="chip mono">{e.timestamp}</span>
                 </div>
-                <div className="hash" style={{ marginBottom: 10, color: 'var(--outside)' }}>
-                  this {e.entry_hash}
+                <div className="panel-body">
+                  <div className="hash" style={{ marginBottom: 4 }}>
+                    prev {e.prev_hash}
+                  </div>
+                  <div className="hash" style={{ marginBottom: 10, color: 'var(--outside)' }}>
+                    this {e.entry_hash}
+                  </div>
+                  <pre className="dump">{JSON.stringify(e.payload, null, 2)}</pre>
                 </div>
-                <pre className="dump">{JSON.stringify(e.payload, null, 2)}</pre>
-              </div>
-            </section>
-          ))}
+              </section>
+            );
+          })}
         </div>
       )}
     </>

@@ -1,22 +1,25 @@
 import './globals.css';
-import { Space_Grotesk, IBM_Plex_Sans, JetBrains_Mono } from 'next/font/google';
+import { Plus_Jakarta_Sans, Outfit, JetBrains_Mono } from 'next/font/google';
 import Nav from '@/components/Nav';
+import Rail from '@/components/Rail';
 
-const display = Space_Grotesk({
+/* One geometric family for everything except the page title, which is the
+ * one place Outfit earns its keep - five 52px headings, nowhere else. */
+const display = Plus_Jakarta_Sans({
   subsets: ['latin'],
-  weight: ['500', '600', '700'],
+  weight: ['400', '500', '600', '700', '800'],
   variable: '--font-display',
 });
 
-const body = IBM_Plex_Sans({
+const pageTitle = Outfit({
   subsets: ['latin'],
-  weight: ['400', '500', '600'],
-  variable: '--font-body',
+  weight: ['600', '700', '800'],
+  variable: '--font-page-title',
 });
 
 const mono = JetBrains_Mono({
   subsets: ['latin'],
-  weight: ['400', '500'],
+  weight: ['400', '500', '600', '700'],
   variable: '--font-mono',
 });
 
@@ -28,11 +31,17 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable}`}>
+    <html
+      lang="en"
+      className={`${display.variable} ${pageTitle.variable} ${mono.variable}`}
+    >
       <body>
-        <div className="shell">
+        <div className="page">
           <Nav />
-          {children}
+          <div className="frame">
+            <Rail />
+            <div className="shell">{children}</div>
+          </div>
         </div>
       </body>
     </html>

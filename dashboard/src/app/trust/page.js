@@ -32,7 +32,8 @@ export default function Measures() {
 
   return (
     <>
-      <h1 className="title">The numbers, and what each of them cannot tell you</h1>
+      <span className="eyebrow">The numbers, and what each of them cannot tell you</span>
+      <h1 className="title">Measures</h1>
       <p className="lede">
         False positives we measure — we see every flag we raise. False negatives we{' '}
         <strong>estimate</strong>, because nobody can count what they did not detect. Planting
@@ -45,7 +46,7 @@ export default function Measures() {
       {/* ------------------------------------------------------- canaries -- */}
       <section className="panel" style={{ marginBottom: 16 }}>
         <div className="panel-head">
-          <span className="eyebrow">False-negative estimate · seeded canaries</span>
+          <span className="panel-title">False-negative estimate · seeded canaries</span>
           <button className="btn" disabled={busy === 'canary'}
             onClick={() => run('canary', () => post('/demo/canary', {}), setCanary)}>
             {busy === 'canary' ? 'Sweeping…' : 'Run a sweep now'}
@@ -76,23 +77,27 @@ export default function Measures() {
                 </div>
               </div>
 
-              <table className="grid" style={{ marginBottom: 12 }}>
-                <thead><tr><th>Category</th><th>Caught</th><th>Seeded</th></tr></thead>
-                <tbody>
-                  {Object.entries(canary.by_category).map(([cat, ratio]) => {
-                    const [c, t] = ratio.split('/').map(Number);
-                    return (
-                      <tr key={cat}>
-                        <td className="mono">{cat}</td>
-                        <td style={{ width: '55%' }}>
-                          <div className="bar"><span style={{ width: `${(c / t) * 100}%` }} /></div>
-                        </td>
-                        <td className="mono">{ratio}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                border: '1px solid var(--rule)', borderRadius: 'var(--r-inset)',
+                marginBottom: 12, overflow: 'hidden',
+              }}>
+                {Object.entries(canary.by_category).map(([cat, ratio], i, arr) => {
+                  const [c, t] = ratio.split('/').map(Number);
+                  return (
+                    <div key={cat} style={{
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px',
+                      borderRight: i < arr.length - 1 ? '1px solid var(--rule)' : 'none',
+                    }}>
+                      <div className="donut" style={{ '--deg': `${t ? (c / t) * 360 : 0}deg` }} />
+                      <div>
+                        <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{ratio}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 2 }}>{cat}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
 
               <div className="note"><b>Caveat:</b> {canary.caveat}</div>
               <div className="note" data-kind="cold" style={{ marginTop: 8 }}>
@@ -109,7 +114,7 @@ export default function Measures() {
       {/* ----------------------------------------------------------- cost -- */}
       <section className="panel" style={{ marginBottom: 16 }}>
         <div className="panel-head">
-          <span className="eyebrow">Cost · gross, overhead, net</span>
+          <span className="panel-title">Cost · gross, overhead, net</span>
           <button className="btn" onClick={() => run('cost', () => get('/demo/cost'), setCost)}>Refresh</button>
         </div>
         <div className="panel-body">
@@ -147,7 +152,7 @@ export default function Measures() {
       {/* ----------------------------------------------------------- bias -- */}
       <section className="panel" style={{ marginBottom: 16 }}>
         <div className="panel-head">
-          <span className="eyebrow">Bias · aggregate, because there is no other kind</span>
+          <span className="panel-title">Bias · aggregate, because there is no other kind</span>
           <button className="btn" disabled={busy === 'bias'}
             onClick={() => run('bias', () => post('/demo/bias', {}), setBias)}>
             {busy === 'bias' ? 'Probing…' : 'Run counterfactual pairs'}
@@ -212,7 +217,7 @@ export default function Measures() {
       {quality && (
         <div className="cols cols-2">
           <section className="panel">
-            <div className="panel-head"><span className="eyebrow">Built · runs after delivery</span></div>
+            <div className="panel-head"><span className="panel-title">Built · runs after delivery</span></div>
             <div className="panel-body">
               {quality.built.map((c) => (
                 <div className="note" key={c.check} data-kind="ok" style={{ marginBottom: 8 }}>
@@ -227,7 +232,7 @@ export default function Measures() {
 
           <section className="panel">
             <div className="panel-head">
-              <span className="eyebrow">Not built · labelled, not omitted</span>
+              <span className="panel-title">Not built · labelled, not omitted</span>
             </div>
             <div className="panel-body">
               {quality.not_built.map((c) => (
