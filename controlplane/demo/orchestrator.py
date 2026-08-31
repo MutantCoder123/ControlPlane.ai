@@ -40,6 +40,7 @@ from controlplane.decision.tiers import (
     signals_from_findings,
 )
 from controlplane.demo import events as ev
+from controlplane.engine.placeholders import find_placeholders
 from controlplane.engine.substitute import SubstitutionEngine
 from controlplane.feedback.loop import FeedbackAggregator, ReviewQueue
 from controlplane.metrics.registry import MetricsRegistry
@@ -291,17 +292,28 @@ class DemoRuntime:
             return
 
         # -- 6. delivered --------------------------------------------------
-        check = self.engine.restore(raw_text, scanned.mapping)
-        unrestored = check.unrestored
+        # `restored` is informational: how many placeholder instances existed
+        # in the full, clean text. It is NOT the alarm - restoring a fresh
+        # copy of `raw_text` always succeeds, because `raw_text` always holds
+        # every placeholder whole. It cannot tell you whether the STREAMED
+        # copy the reader actually saw came out the same way.
+        restored_count = self.engine.restore(raw_text, scanned.mapping).restored
+
+        # D15's alarm, checked against `answer` - the text assembled commit
+        # by commit, exactly as delivered. A placeholder bisected by a commit
+        # boundary (see stream/buffer.py) would be invisible to a check
+        # against `raw_text`, because `raw_text` was never bisected. Checking
+        # the thing that was actually rendered is the whole point of an
+        # alarm: non-empty here means a judge is about to see `[[CUST_A`
+        # on stage, and the previous version of this check could not detect
+        # that even while it was happening.
+        unrestored = find_placeholders(answer)
         yield stream.emit(
             ev.ANSWER_DONE,
             side="inside",
             answer=answer,
             raw=raw_text,
-            restored=check.restored,
-            # D15's alarm. Non-empty here means the placeholder format did not
-            # survive the round trip and the strongest fifteen seconds of the
-            # pitch is about to show artefacts on stage.
+            restored=restored_count,
             unrestored=unrestored,
             ttfb_ms=buffer.stats.ttfb_ms,
             commits=buffer.stats.commits,

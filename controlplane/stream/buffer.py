@@ -38,6 +38,24 @@ contiguous piece with the text that follows it.
 Same window, one commit later, and airtight instead of merely observant. The
 cost is that the tail of the stream lags by fifty characters - about eight
 words, well inside the reader's own lag - and `flush()` releases it at the end.
+
+A SECOND SEAM THE OVERLAP WINDOW DOES NOT COVER
+------------------------------------------------
+`overlap_chars` protects the SCANNER: it is a fixed-size hold, sized so a
+straddling secret is always caught. It says nothing about where a placeholder
+happens to sit. If `[[CUST_A]]` starts before that fixed cut and ends after
+it, the cut still lands in the middle of it - `safe_text` gets `[[CUST` and
+`_A]]` goes out with the next commit. `restore()` runs on `safe_text` alone,
+so it sees a bracket with no closing half, matches nothing, and the reader is
+shown a literal `[[CUST` that can never be un-rendered. This is D15 at the
+seam, and it is a different failure from the split-secret bug above: that one
+is about the SCANNER seeing a whole secret; this one is about `safe_text`
+seeing a whole PLACEHOLDER before it is allowed to leave.
+
+So `safe_text` gets a second, independent trim: if it ends in what looks like
+an unclosed placeholder opening, that tail moves into `_held` regardless of
+`overlap_chars`, and waits for the closing bracket to arrive before it is
+ever considered for release.
 """
 
 from __future__ import annotations
@@ -50,6 +68,14 @@ from controlplane.policy.profile import Profile
 
 #: Sentence boundaries: the natural, invisible commit point.
 _BOUNDARY_RE = re.compile(r"[.!?]['\")\]]?\s|\n\n|\n")
+
+#: An opening bracket with no closing `]` or `]]` yet - the tail of
+#: `safe_text` may be mid-way through `[[CUST_A` with the rest still in
+#: `_pending` or not yet generated. 24 chars is generous headroom over the
+#: longest core the engine mints (`placeholders.py`'s `_CORE`, well under
+#: 16) - a false match just holds a few extra characters one commit longer,
+#: while a false negative renders an artefact that cannot be taken back.
+_DANGLING_OPEN_RE = re.compile(r"\[{1,2}[A-Za-z0-9_]{0,24}$")
 
 
 @dataclass(frozen=True)
@@ -205,6 +231,18 @@ class CommitPointBuffer:
 
         overlap = 0 if final else self.profile.streaming.overlap_chars
         safe_text = window[: len(window) - overlap] if overlap else window
+
+        if not final:
+            # The independent seam-guard: `overlap_chars` alone does not
+            # guarantee the cut misses every placeholder (see the module
+            # docstring). On flush there is nothing left to wait for, so an
+            # actually-truncated placeholder here is a real failure - and
+            # `restore()`'s `unrestored` list is what has to catch it, not
+            # this guard.
+            dangling = _DANGLING_OPEN_RE.search(safe_text)
+            if dangling:
+                safe_text = safe_text[: dangling.start()]
+
         new_held = window[len(safe_text):]
 
         if len(new_held) > len(self._held) and self._held and safe_text.startswith(self._held):

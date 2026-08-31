@@ -160,6 +160,72 @@ def test_a_placeholder_split_across_chunks_still_restores(runtime):
     assert "[[" not in done["answer"]
 
 
+def test_the_overlap_cut_itself_does_not_bisect_a_placeholder(runtime):
+    """The bug the earlier test could not catch, found by watching the demo.
+
+    `test_a_placeholder_split_across_chunks_still_restores` reassembles the
+    placeholder into ONE pending buffer before any commit fires, so the
+    whole token sits comfortably inside the 50-char hold. It says nothing
+    about the OTHER way a placeholder can split: the fixed-size hold itself
+    landing mid-token, when there happen to be roughly 41-49 characters of
+    real trailing text after it in the same commit window. That gap is
+    exactly what beat 1 of the demo hit on a live model.
+
+    370 characters total, arranged so `window_len - overlap_chars(50)` lands
+    inside the ten-character placeholder: 315 filler characters first
+    (driving the commit via token count), then the placeholder, then exactly
+    45 characters after it. `315 + 10 + 45 - 50 = 320` - five characters into
+    the placeholder, not before its start or past its end. What matters here
+    is that this reliably reproduces the bisection at the profile's REAL
+    overlap_chars, not a shrunk test value.
+    """
+    events = drive(
+        runtime,
+        "Write to Priya Sharma.",
+        ["filler " * 45 + "[[CUST_A]]" + "z" * 45],
+    )
+    done = one(events, "answer.done")
+
+    assert "Priya Sharma" in done["answer"]
+    assert done["unrestored"] == []
+    assert "[[" not in done["answer"]
+    for release in stages(events, "buffer.release"):
+        opens, closes = release["text"].count("["), release["text"].count("]")
+        assert opens == closes, f"a bracket escaped without its pair: {release['text']!r}"
+
+
+def test_the_unrestored_alarm_checks_what_was_actually_delivered(runtime, monkeypatch):
+    """The alarm has to watch the STREAM, not re-grade a clean copy of itself.
+
+    Before this test existed, `answer.done`'s `unrestored` was computed by
+    re-running `restore()` on the full raw model output - which is always
+    whole, because it was never bisected by a commit boundary. That always
+    passed, even while the STREAMED `answer` (the thing actually rendered)
+    contained a broken placeholder. An alarm that cannot see the failure it
+    exists to catch is worse than no alarm: it reports "0 unrestored" on the
+    exact request that just failed.
+
+    This disables the buffer's seam-guard (simulating a future regression in
+    it) and asserts the alarm still fires - proving the alarm is now wired to
+    `answer`, independently of whether the guard above continues to work.
+    """
+    import re as _re
+
+    import controlplane.stream.buffer as buffer_module
+
+    monkeypatch.setattr(buffer_module, "_DANGLING_OPEN_RE", _re.compile(r"(?!)"))
+
+    events = drive(
+        runtime,
+        "Write to Priya Sharma.",
+        ["filler " * 45 + "[[CUST_A]]" + "z" * 45],
+    )
+    done = one(events, "answer.done")
+
+    assert "[[" in done["answer"], "the guard is disabled - this run SHOULD bisect"
+    assert done["unrestored"], "the alarm must fire when the delivered text is broken"
+
+
 def test_an_outbound_credential_stops_the_stream(runtime):
     """Not released, then retracted - never released.
 

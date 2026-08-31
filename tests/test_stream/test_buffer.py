@@ -208,6 +208,46 @@ def test_a_placeholder_split_across_chunks_still_restores(engine):
     assert "Priya Sharma" in seen and "[[" not in seen
 
 
+def test_the_overlap_cut_does_not_bisect_a_placeholder(engine):
+    """Found by watching the dashboard, not by a test - now fixed at the seam.
+
+    `overlap_chars` is sized to catch a straddling SECRET; nothing about it
+    guarantees the cut misses a PLACEHOLDER. With a 4-char hold, one commit
+    on "Dear [[CUST_A]]" cuts at `window[:-4]`, landing squarely inside the
+    token: "Dear [[CUST" would be released, "_A]]" held for later. Neither
+    half is a complete placeholder, so `restore()` matches nothing in
+    either, and the two pieces concatenate back into literal bracket text -
+    exactly what beat 1 of the demo showed on screen.
+
+    Forcing `commit_tokens=1` means the whole string is pending by the time
+    the single `feed()` call's commit loop fires, so this is one deterministic
+    commit, not a race against chunk boundaries.
+    """
+    scanned = engine.scan_inbound("Refund Priya Sharma.")
+    placeholder = next(iter(scanned.mapping))
+    assert placeholder not in ("Priya Sharma",)  # sanity: a real placeholder, not a hit fixture bug
+
+    buffer = CommitPointBuffer(
+        interactive(overlap_chars=4, commit_tokens=1),
+        engine.scan_outbound,
+        restore=engine.restore,
+        mapping=scanned.mapping,
+    )
+    seen, releases = run_stream(buffer, [f"Dear {placeholder}"])
+
+    assert "Priya Sharma" in seen
+    assert "[[" not in seen
+    # The bisection specifically: neither release may contain a dangling
+    # bracket. A test that only checks the FINAL concatenation can pass by
+    # coincidence (the two broken halves can reassemble into the original
+    # bracketed text) - this is the "built from its own output" shape
+    # WORKFLOW.md warns about, so it is checked per-release instead.
+    for release in releases:
+        opens = release.text.count("[")
+        closes = release.text.count("]")
+        assert opens == closes, f"a bracket was released without its pair: {release.text!r}"
+
+
 # --------------------------------------------------------------------------
 # Commit triggers
 # --------------------------------------------------------------------------
