@@ -1,0 +1,19 @@
+{
+  "name": "European Union",
+  "description": "Illustrative jurisdictional floor authored by a compliance team, framed on the EU AI Act's high-risk categories. This is a mechanism for expressing jurisdiction-specific policy, not an implementation of any statute, and not legal advice.",
+  "audit_level": "full",
+  "decision": {
+    "block_at": 0.75,
+    "flag_budget_per_100": 30
+  },
+  "quality": {
+    "hallucination_tier": 2
+  },
+  "outbound": {
+    "scan_pii": true
+  },
+  "session": {
+    "max_records_per_session": 10,
+    "max_agent_steps": 15
+  }
+}

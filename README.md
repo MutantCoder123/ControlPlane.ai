@@ -32,9 +32,10 @@ one line — its `base_url` — and nothing else.
 | Commit-point buffer (P4) | ✅ done | 28 |
 | Async quality checks (P7) | ✅ done (thin) | 25 |
 | Dashboard (P12) | ✅ done | 14 |
+| Session risk + jurisdiction floors (Phase 7 — D4, D29) | ✅ done | 21 |
 | Demo cut + repo (P14) | 🔨 in progress | |
 
-**377 tests, no network and no API key required.** The dashboard needs a local
+**401 tests, no network and no API key required.** The dashboard needs a local
 model; everything else runs offline.
 
 Scope and ordering: [BUILD-PLAN.md](BUILD-PLAN.md).

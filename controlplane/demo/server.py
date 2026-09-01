@@ -43,6 +43,13 @@ app.add_middleware(
 
 runtime = DemoRuntime()
 
+#: The jurisdiction floor currently in force, if any (Phase 7). Demo-server
+#: state, not runtime state - `ControlPlane.compile_bundle` is stateless with
+#: respect to it, so this is just what the LAST publish asked for, kept so a
+#: subsequent policy patch recompiles under the same floor rather than
+#: silently dropping it.
+current_jurisdiction: str | None = None
+
 
 # --------------------------------------------------------------------------
 # The pipeline
@@ -52,13 +59,23 @@ class RunRequest(BaseModel):
     prompt: str
     profile: str | None = None
     team: str = "support"
+    #: Supplied by the caller, never minted here - see orchestrator.py's note
+    #: on why we do not generate our own session ids.
+    session_id: str | None = None
+    agent_steps: int = 0
 
 
 @app.post("/demo/run")
 async def run(req: RunRequest):
     async def frames():
         try:
-            async for event in runtime.run(req.prompt, profile_name=req.profile, team=req.team):
+            async for event in runtime.run(
+                req.prompt,
+                profile_name=req.profile,
+                team=req.team,
+                session_id=req.session_id,
+                agent_steps=req.agent_steps,
+            ):
                 yield ev.EventStream.sse(event)
         except Exception as exc:                      # noqa: BLE001 - demo surface
             yield ev.EventStream.sse(
@@ -159,6 +176,42 @@ PRESETS = [
                  "tier is a function of severity x confidence x PROFILE, never "
                  "the finding alone.",
     },
+    {
+        "id": "session-sprawl",
+        "title": "No single turn looks wrong",
+        "proves": "Compounding risk across turns, caught without storing a prompt",
+        "profile": "internal-knowledge",
+        # A SEQUENCE, not one prompt - the frontend fires these in order on one
+        # session id. `internal-knowledge` caps at 3 distinct records per
+        # session (Phase 7), small on purpose so the fourth, ordinary-looking
+        # request is the one that trips it.
+        #
+        # Each prompt is fully self-contained on purpose, not "now do the same
+        # for X": every request really is independent and stateless - we send
+        # no prior turns to the model - so a prompt that only makes sense with
+        # memory of the last one gets a confused answer, which looked like a
+        # bug on stage before this fix. Same phrasing each time, only the name
+        # changes, which is itself the point: nothing about any one request
+        # is different, only the session accumulating underneath it.
+        "prompts": [
+            "Internal note: Priya Sharma called to confirm her contact "
+            "details are up to date. Write one sentence for the file "
+            "confirming the note was reviewed.",
+            "Internal note: Rajesh Kumar called to confirm his contact "
+            "details are up to date. Write one sentence for the file "
+            "confirming the note was reviewed.",
+            "Internal note: Kavya Reddy called to confirm her contact "
+            "details are up to date. Write one sentence for the file "
+            "confirming the note was reviewed.",
+            "Internal note: Anita Desai called to confirm her contact "
+            "details are up to date. Write one sentence for the file "
+            "confirming the note was reviewed.",
+        ],
+        "watch": "Each request alone is unremarkable - one customer, one lookup. "
+                 "The session panel counts distinct customers touched, not what "
+                 "was said, and the fourth trips the budget: multi-turn "
+                 "compounding, caught with counters instead of a transcript.",
+    },
 ]
 
 
@@ -230,8 +283,17 @@ async def profiles():
                 "substitute_pii": p.inbound.substitute_pii,
                 "known_value_matching": p.inbound.known_value_matching,
             },
+            "session": {
+                "max_records_per_session": p.session.max_records_per_session,
+                "max_agent_steps": p.session.max_agent_steps,
+            },
+            "audit_level": p.audit_level,
         })
-    return {"version": runtime.store.version, "profiles": out}
+    return {
+        "version": runtime.store.version,
+        "jurisdiction": current_jurisdiction,
+        "profiles": out,
+    }
 
 
 class PatchRequest(BaseModel):
@@ -256,7 +318,8 @@ async def patch_policy(req: PatchRequest):
 
     try:
         bundle = runtime.control.compile_bundle(
-            overrides={req.profile: {req.section: {req.key: req.value}}}
+            overrides={req.profile: {req.section: {req.key: req.value}}},
+            jurisdiction=current_jurisdiction,
         )
     except Exception as exc:                          # noqa: BLE001
         # A bad policy fails when it is authored, never when a request hits
@@ -270,6 +333,60 @@ async def patch_policy(req: PatchRequest):
         "profile": req.profile,
         "fingerprint": {"before": before.fingerprint, "after": after.fingerprint},
         "diff": {k: [str(v[0]), str(v[1])] for k, v in after.diff(before).items()},
+    }
+
+
+# --------------------------------------------------------------------------
+# Jurisdiction (Phase 7) - a floor every profile is clamped against, never
+# a ceiling. "Regulatory expectations differ by geography and industry...
+# and continue to evolve, so rigid, hard-coded rules age quickly" (brief).
+# --------------------------------------------------------------------------
+
+@app.get("/demo/jurisdictions")
+async def jurisdictions():
+    return {
+        "current": current_jurisdiction,
+        "options": [runtime.control.jurisdiction_info(c) for c in runtime.control.list_jurisdictions()],
+    }
+
+
+class JurisdictionRequest(BaseModel):
+    code: str | None = None  # null clears the floor entirely
+
+
+@app.post("/demo/jurisdiction")
+async def set_jurisdiction(req: JurisdictionRequest):
+    """Publish every profile clamped to a jurisdiction's floor, and show
+    exactly what moved.
+
+    Compiles TWICE - once plain, once under the floor - and diffs the two,
+    rather than adding a field to `Profile` to record it. That keeps the
+    dataclass and its fingerprint clean, and it is free: this is the control
+    plane, off the hot path, which is the entire point of the split (D20).
+    """
+    global current_jurisdiction
+
+    try:
+        plain = runtime.control.compile_bundle()
+        floored = runtime.control.compile_bundle(jurisdiction=req.code)
+    except Exception as exc:                          # noqa: BLE001
+        raise HTTPException(400, str(exc)) from exc
+
+    runtime.store.publish(floored)
+    current_jurisdiction = req.code
+
+    per_profile = {}
+    for name in floored.names:
+        diff = floored.get(name).diff(plain.get(name))
+        per_profile[name] = {
+            "fingerprint": {"before": plain.get(name).fingerprint, "after": floored.get(name).fingerprint},
+            "clamped": {k: [str(v[0]), str(v[1])] for k, v in diff.items()},
+        }
+
+    return {
+        "version": runtime.store.version,
+        "jurisdiction": req.code,
+        "profiles": per_profile,
     }
 
 
@@ -323,6 +440,39 @@ async def audit_tamper(req: TamperRequest):
         "broken_at": result.broken_at,
         "reason": result.reason,
     }
+
+
+# --------------------------------------------------------------------------
+# Session risk (D4, Phase 7) - multi-turn and agent-step compounding,
+# caught by counting rather than by remembering.
+# --------------------------------------------------------------------------
+
+@app.get("/demo/session/{session_id}")
+async def session_counters(session_id: str):
+    """What we know about a session, right now - references only.
+
+    A 404 here just means the session hasn't sent a request yet; it is not
+    an error.
+    """
+    counters = runtime.sessions.counters(session_id)
+    if counters is None:
+        raise HTTPException(404, f"no session {session_id!r} observed yet")
+    return {
+        "session_id": session_id,
+        "turns": counters.turns,
+        "distinct_records": counters.distinct_records,
+        "agent_steps": counters.agent_steps,
+        "findings": counters.findings,
+        "blocks": counters.blocks,
+        "first_seen": counters.first_seen,
+    }
+
+
+@app.post("/demo/session/{session_id}/forget")
+async def session_forget(session_id: str):
+    """Drop a session's counters. Proves forgetting is a real operation."""
+    runtime.sessions.forget(session_id)
+    return {"forgotten": session_id}
 
 
 # --------------------------------------------------------------------------

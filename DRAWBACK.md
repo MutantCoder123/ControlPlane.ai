@@ -1,6 +1,6 @@
 # ControlPlane — Drawbacks, Gaps and Accepted Trade-offs
 
-**Living document.** Updated as ideation progresses. Last updated: 2026-08-29.
+**Living document.** Updated as ideation progresses. Last updated: 2026-08-31.
 
 ---
 
@@ -492,16 +492,34 @@ governance exists, the baseline is the floor where it does not, and coverage
 degrades gracefully rather than falling to zero.
 
 ### D4 escalation — multi-turn and agentic compounding is now named by the brief
-🟡 `mitigated` 2026-08-30 — the architectural half is now built.
-`feedback/session.py` tracks cumulative disclosure and agent-step budgets from
-**counters only**: turns, distinct record *references*, step counts. A test
-asserts the counters dataclass has no field capable of holding content.
+✅ `resolved` 2026-08-31 (Phase 7) — built AND wired. `feedback/session.py`
+tracks cumulative disclosure and agent-step budgets from **counters only**:
+turns, distinct record *references*, step counts. A test asserts the counters
+dataclass has no field capable of holding content.
+
+What "mitigated" understated: the tracker was built and imported by nothing —
+invisible on every path a judge could watch. Phase 7 made the budgets a
+`SessionPolicy` profile section (not a constructor argument, since a support
+bot fielding hundreds of customers and a decision-support tool on one case
+file need different caps), wired `DemoRuntime.run()` to call `observe()` every
+request, added a `session.risk` event, and gave Transit a live panel: turns,
+records touched (`4 / 3`, turning red over budget), agent steps, blocks, with
+*"counters only — no prompt, no response, no value"* printed permanently
+beside the numbers. A `Run 4 turns` preset fires four self-contained,
+individually unremarkable requests naming four different customers on one
+session id, and the fourth visibly trips `internal-knowledge`'s
+deliberately-small cap of 3.
 
 Six turns each touching one new customer trips a cumulative-disclosure budget
 even though no single turn looked alarming — which is exactly the compounding
 risk the brief describes, caught without storing a prompt. Full multi-turn
 *reasoning* (did turn 3 contradict turn 1?) remains out of scope and stated as
 such: we did not keep turn 1.
+
+*Decided, not accidental:* tripping the budget flags the session; it does not
+block the request. A cumulative verdict is evidence about a pattern, not proof
+about this one request, and severing turn seven of a legitimate investigation
+is exactly the over-flagging failure the brief warns about elsewhere.
 
 The brief calls out "multi-turn conversations and AI agents that take actions
 (not just generate text)" as compounding risk. §22 already lists "no multi-turn
@@ -514,6 +532,35 @@ agent-level risk is a control-plane concern**: step budgets, cumulative
 disclosure tracking against a session identifier the customer supplies, and the
 automated-action override in §11.5. We track the *aggregate*, not the content.
 State plainly that full multi-turn analysis is out of prototype scope.
+
+### D29 — `geography` was a field read by nothing
+✅ `resolved` 2026-08-31 (Phase 7). The brief: *"regulatory expectations differ
+by geography and industry... and continue to evolve, so rigid, hard-coded
+rules age quickly."* `Profile.geography` existed since Phase 2 and nothing in
+the compiler, the store, or the demo ever branched on it — declared,
+displayed, decorative.
+
+Fixed by adding a middle compilation layer: `_base.json` → **jurisdiction
+floor** → profile, clamped rather than merged. A jurisdiction may only make a
+profile *stricter* than it already is, never looser — `min`/`max`/logical-OR
+per field, direction fixed in a table (`_clamp_to_floor` in `policy/profile.py`),
+never overwrite. Getting that backwards is how a governance product lets a
+team quietly opt out of the law by editing their own config, so it is enforced
+in the compiler, not documented as a convention.
+
+Three illustrative floors ship (`policy/jurisdictions/{eu,in,us}.json`), each
+carrying its own disclaimer: *"a mechanism for expressing jurisdiction-specific
+policy, not an implementation of any statute, and not legal advice."* We do
+**not** claim GDPR, DPDP Act, or EU AI Act compliance — we claim the mechanism
+a compliance team would use to express it, demonstrated with three examples.
+Verified live: the EU floor clamps `block_at` on two of three profiles and
+turns on `audit_level: full` and `outbound.scan_pii` everywhere they were off;
+the US floor changes **nothing** — every profile's fingerprint is identical
+before and after, the honest way to show a permissive floor rather than assert
+one. A fourth `/policy` button tries to loosen `internal-knowledge` past the
+EU floor and the compile succeeds with an **unchanged fingerprint** — proof
+the request was silently absorbed, not a hard refusal, which is the correct
+shape for a floor rather than a validation error.
 
 ---
 
@@ -735,3 +782,19 @@ It now fails to compile.
   drives the whole pipeline with a fake model — fourteen tests, and a
   mutation check confirms they go red when the buffer is bypassed or the
   original text is dispatched.
+
+- **2026-08-31** — Phase 7: **D4 escalation resolved, D29 resolved.**
+  `feedback/session.py`'s tracker went from built-but-unwired to live on the
+  demo path: `SessionPolicy` is now a profile section, `session.risk` fires
+  every request, and Transit shows a real-time panel (`4 / 3 records touched`,
+  turning red over budget) with a `Run 4 turns` preset that trips it on
+  camera. `geography` went from a decorative field to a jurisdiction floor a
+  profile can be stricter than but never looser than — enforced by a clamp
+  table in the compiler, not a convention. Both fixes reuse machinery already
+  under test: the tracker's 9 tests and the fingerprint/diff machinery the
+  policy patch route already had. Along the way, found and fixed a real,
+  intermittent bug the new tests exposed: `uuid.uuid4().hex[:12]` has a ~0.3%
+  chance of landing all-digits, which the audit log's own guard then refused
+  to write as a possible card number — a live crash risk on stage, not just a
+  flaky test, fixed by prefixing the id rather than making the collision
+  merely rarer. 401 tests.

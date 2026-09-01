@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { get, runStream, usd, ms } from '@/lib/api';
+import { get, post, runStream, usd, ms } from '@/lib/api';
 import { Marked, Spanned, RawStream } from '@/components/Marked';
 
 const EMPTY = {
@@ -9,8 +9,12 @@ const EMPTY = {
   raw: '', answer: '', hold: { pending_chars: 0, held_chars: 0 },
   release: null, doneEvent: null, cost: null,
   quality: [], qualityDone: null, block: null, error: null,
+  sessionRisk: null,
   events: [],
 };
+
+const SESSION_KEY = 'controlplane-session-id';
+const mintSessionId = () => crypto.randomUUID().slice(0, 12);
 
 export default function Transit() {
   const [presets, setPresets] = useState([]);
@@ -19,6 +23,8 @@ export default function Transit() {
   const [profile, setProfile] = useState('internal-knowledge');
   const [profiles, setProfiles] = useState([]);
   const [running, setRunning] = useState(false);
+  const [turnLabel, setTurnLabel] = useState(null); // "2 / 4" during a multi-turn preset
+  const [sessionId, setSessionId] = useState(null); // set client-side only, after mount
   const [s, setS] = useState(EMPTY);
   const abort = useRef(null);
 
@@ -30,25 +36,39 @@ export default function Transit() {
       })
       .catch(() => {});
     get('/demo/profiles').then((d) => setProfiles(d.profiles)).catch(() => {});
+
+    // Session id is generated here, not read from anything the server
+    // minted - see orchestrator.py's note on why we never mint one
+    // ourselves. Persisted so a page reload continues the same session
+    // rather than silently starting a fresh one every time.
+    try {
+      const existing = window.sessionStorage.getItem(SESSION_KEY);
+      const id = existing || mintSessionId();
+      if (!existing) window.sessionStorage.setItem(SESSION_KEY, id);
+      setSessionId(id);
+    } catch {
+      setSessionId(mintSessionId()); // storage unavailable - still usable, just not persisted
+    }
   }, []);
 
   const pick = (p) => {
     setActivePreset(p.id);
-    setPrompt(p.prompt);
+    setPrompt(p.prompts ? p.prompts[0] : p.prompt);
     if (p.profile) setProfile(p.profile);
   };
 
-  const send = useCallback(async () => {
-    abort.current?.abort();
-    abort.current = new AbortController();
-    setRunning(true);
-    setS(EMPTY);
-
-    const acc = { ...EMPTY, events: [] };
+  /* One request, narrated - shared by a single send and by each step of a
+   * multi-turn preset. Does not reset `sessionRisk`: the server returns the
+   * true CUMULATIVE session state on every request, so the previous turn's
+   * value is only ever replaced by a fresher one, never cleared early. */
+  const runOnce = useCallback((promptText, opts = {}) => {
+    const acc = { ...EMPTY, sessionRisk: opts.keepRisk ?? null, events: [] };
     const flush = () => setS({ ...acc, events: [...acc.events] });
+    flush();
 
-    try {
-      await runStream({ prompt, profile }, (e) => {
+    return runStream(
+      { prompt: promptText, profile, sessionId, agentSteps: opts.agentSteps ?? 0 },
+      (e) => {
         acc.events.push(e);
         switch (e.stage) {
           case 'request.open':    acc.open = e; break;
@@ -66,21 +86,67 @@ export default function Transit() {
           case 'cost':            acc.cost = e; break;
           case 'quality.finding': acc.quality.push(e); break;
           case 'quality.done':    acc.qualityDone = e; break;
+          case 'session.risk':    acc.sessionRisk = e; break;
           case 'block':           acc.block = e; break;
           case 'error':           acc.error = e; break;
           default: break;
         }
         flush();
-      }, abort.current.signal);
+      },
+      abort.current.signal,
+    ).then(() => acc.sessionRisk);
+  }, [profile, sessionId]);
+
+  const send = useCallback(async () => {
+    abort.current?.abort();
+    abort.current = new AbortController();
+    setRunning(true);
+    setTurnLabel(null);
+    try {
+      await runOnce(prompt, { keepRisk: s.sessionRisk });
     } catch (err) {
       if (err.name !== 'AbortError') {
-        acc.error = { reason: `${err.message}. Is the demo server running?` };
-        flush();
+        setS((prev) => ({ ...prev, error: { reason: `${err.message}. Is the demo server running?` } }));
       }
     } finally {
       setRunning(false);
     }
-  }, [prompt, profile]);
+  }, [prompt, runOnce, s.sessionRisk]);
+
+  /* Fires each prompt in a `prompts` preset in turn, on the same session id,
+   * pausing between so the session counter is visibly climbing rather than
+   * jumping straight to its final value. No single turn is remarkable; the
+   * point is watching the session panel react across all of them. */
+  const runSequence = useCallback(async (prompts) => {
+    abort.current?.abort();
+    abort.current = new AbortController();
+    setRunning(true);
+    let risk = s.sessionRisk;
+    try {
+      for (let i = 0; i < prompts.length; i++) {
+        setTurnLabel(`${i + 1} / ${prompts.length}`);
+        setPrompt(prompts[i]);
+        risk = await runOnce(prompts[i], { keepRisk: risk });
+        if (i < prompts.length - 1) await new Promise((r) => setTimeout(r, 900));
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        setS((prev) => ({ ...prev, error: { reason: `${err.message}. Is the demo server running?` } }));
+      }
+    } finally {
+      setRunning(false);
+    }
+  }, [runOnce, s.sessionRisk]);
+
+  const newSession = useCallback(async () => {
+    if (sessionId) {
+      try { await post(`/demo/session/${sessionId}/forget`, {}); } catch { /* fine either way */ }
+    }
+    const fresh = mintSessionId();
+    try { window.sessionStorage.setItem(SESSION_KEY, fresh); } catch { /* ignore */ }
+    setSessionId(fresh);
+    setS((prev) => ({ ...prev, sessionRisk: null }));
+  }, [sessionId]);
 
   const mapping = s.scan?.mapping ?? {};
   const placeholders = Object.keys(mapping);
@@ -135,9 +201,19 @@ export default function Transit() {
               <option key={p.name} value={p.name}>{p.name}</option>
             ))}
           </select>
-          <button className="btn btn-primary" onClick={send} disabled={running || !prompt.trim()}>
-            {running ? 'In flight…' : 'Send request'}
-          </button>
+          {preset?.prompts ? (
+            <button
+              className="btn btn-primary"
+              onClick={() => runSequence(preset.prompts)}
+              disabled={running}
+            >
+              {running ? `Turn ${turnLabel}…` : `Run ${preset.prompts.length} turns`}
+            </button>
+          ) : (
+            <button className="btn btn-primary" onClick={send} disabled={running || !prompt.trim()}>
+              {running ? 'In flight…' : 'Send request'}
+            </button>
+          )}
           {s.open && (
             <span className="chip mono">
               fp {s.open.fingerprint} · policy v{s.open.policy_version}
@@ -308,7 +384,51 @@ export default function Transit() {
       </div>
 
       {/* -------------------------------------------------- after delivery -- */}
-      <div className="cols cols-3" style={{ marginTop: 16 }}>
+      <div className="cols cols-4" style={{ marginTop: 16 }}>
+        <section className="panel" data-role="session">
+          <div className="panel-head">
+            <span className="panel-title">This session</span>
+            <span className="chip mono">{sessionId ?? '—'}</span>
+          </div>
+          <div className="panel-body">
+            {s.sessionRisk ? (
+              <>
+                <div className="cols cols-2" style={{ marginBottom: 10, rowGap: 10 }}>
+                  <div className="stat">
+                    <span className="v">{s.sessionRisk.turns}</span>
+                    <span className="k">turns</span>
+                  </div>
+                  <div className="stat" data-tone={s.sessionRisk.over_budget ? 'stop' : undefined}>
+                    <span className="v">
+                      {s.sessionRisk.distinct_records} / {s.sessionRisk.limits.max_records_per_session}
+                    </span>
+                    <span className="k">records touched</span>
+                  </div>
+                  <div className="stat">
+                    <span className="v">{s.sessionRisk.agent_steps}</span>
+                    <span className="k">agent steps</span>
+                  </div>
+                  <div className="stat">
+                    <span className="v">{s.sessionRisk.blocks}</span>
+                    <span className="k">blocks</span>
+                  </div>
+                </div>
+                {s.sessionRisk.over_budget && (
+                  <div className="note" data-kind="stop" style={{ marginBottom: 10 }}>
+                    {s.sessionRisk.reasons.map((r, i) => <div key={i}>⚠ {r}</div>)}
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="payload-empty">no turns yet this session</p>
+            )}
+            <div className="hash prose">counters only — no prompt, no response, no value</div>
+            <div className="composer-row" style={{ marginTop: 10 }}>
+              <button className="btn" onClick={newSession} disabled={running}>New session</button>
+            </div>
+          </div>
+        </section>
+
         <section className="panel" data-role="decision">
           <div className="panel-head">
             <span className="panel-title">Decision</span>

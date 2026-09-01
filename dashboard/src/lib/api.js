@@ -38,11 +38,21 @@ export async function post(path, body) {
  * carries one. That failure looks like the model going quiet, which is the
  * worst thing that can happen mid-take.
  */
-export async function runStream({ prompt, profile, team = 'support' }, onEvent, signal) {
+export async function runStream(
+  { prompt, profile, team = 'support', sessionId, agentSteps },
+  onEvent,
+  signal,
+) {
   const res = await fetch(`${API}/demo/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, profile, team }),
+    body: JSON.stringify({
+      prompt,
+      profile,
+      team,
+      session_id: sessionId ?? null,
+      agent_steps: agentSteps ?? 0,
+    }),
     signal,
   });
   if (!res.ok || !res.body) throw new Error(`run -> ${res.status}`);

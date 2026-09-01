@@ -316,6 +316,28 @@ def test_the_audit_entry_holds_references_and_no_values(runtime):
     assert runtime.audit.verify()
 
 
+def test_a_request_id_that_is_all_digits_does_not_crash_the_audit_log(runtime, monkeypatch):
+    """A flaky failure this suite hit by chance, made deterministic and fixed.
+
+    `uuid.uuid4().hex[:12]` is drawn from 0-9a-f, so roughly 1 in 300 requests
+    would land on 12 characters that are ALL digits - which the audit log's
+    own guard refuses to write, reading it as a possible card or account
+    number (`\\b\\d{12,19}\\b`). That crashed a live request non-deterministically,
+    including during test runs, which is how it was found. Forcing the
+    worst case here makes sure the id's prefix keeps defusing it.
+    """
+    import uuid as uuid_module
+
+    class AllDigits:
+        hex = "123456789012"
+
+    monkeypatch.setattr(uuid_module, "uuid4", lambda: AllDigits())
+
+    events = drive(runtime, "Refund Priya Sharma 45230.", ["Done."])
+    assert stages(events, "error") == []
+    assert one(events, "audit.append")["entry"]["payload"]["request_id"].startswith("req_")
+
+
 def test_the_audit_event_does_not_shadow_the_stream_sequence(runtime):
     """An entry carries its own `seq`; splatting it renumbered the event.
 
@@ -345,4 +367,95 @@ def test_every_event_declares_which_side_of_the_line_it_belongs_to(runtime):
     events = drive(runtime, "Refund Priya Sharma 45230.", ["Done."])
     assert all(e["side"] in {"inside", "outside", "meta"} for e in events)
     assert one(events, "dispatch")["side"] == "outside"
+
+
+# --------------------------------------------------------------------------
+# Session risk (D4) - multi-turn and agent-step compounding, caught by
+# counting rather than by remembering. The Round 2 brief names this directly.
+# --------------------------------------------------------------------------
+
+def test_no_session_id_means_no_session_tracking(runtime):
+    """An anonymous request has no session to accumulate against.
+
+    We never mint our own id - see the module docstring on why - so omitting
+    one has to be a real, silent no-op rather than a fallback identity that
+    would let unrelated anonymous callers pool into one bucket.
+    """
+    events = drive(runtime, "Refund Priya Sharma 45230.", ["Done."])
+    assert stages(events, "session.risk") == []
+    assert len(runtime.sessions) == 0
+
+
+def test_a_quiet_session_reports_no_risk(runtime):
+    events = drive(runtime, "Refund Priya Sharma 45230.", ["Done."], session_id="sess-1")
+    risk = one(events, "session.risk")
+    assert risk["turns"] == 1
+    assert risk["distinct_records"] == 1
+    assert not risk["over_budget"]
+    assert risk["reasons"] == []
+
+
+def test_the_budget_trips_on_the_fourth_distinct_customer(runtime):
+    """internal-knowledge caps at 3 distinct records per session (Phase 7) -
+    small on purpose, so this trips inside a four-turn demo beat.
+
+    No single one of these four prompts is individually alarming. That is
+    the point: the compounding is only visible in the aggregate.
+    """
+    names = ["Priya Sharma", "Rajesh Kumar", "Kavya Reddy", "Anita Desai"]
+    last = None
+    for name in names:
+        events = drive(
+            runtime, f"Summarise the account note for {name}.", ["Noted."],
+            session_id="sess-multi",
+        )
+        last = one(events, "session.risk")
+
+    assert last["turns"] == 4
+    assert last["distinct_records"] == 4
+    assert last["over_budget"]
+    assert "cumulative disclosure" in last["reasons"][0]
+    assert "limit 3" in last["reasons"][0]
+
+
+def test_tripping_the_budget_does_not_block_the_request(runtime):
+    """A cumulative verdict is evidence about a pattern, not proof about this
+    request. Severing turn four of a legitimate investigation is exactly the
+    over-flagging failure the brief warns about - the session is flagged,
+    the request still runs.
+    """
+    for name in ["Priya Sharma", "Rajesh Kumar", "Kavya Reddy", "Anita Desai"]:
+        events = drive(
+            runtime, f"Summarise the account note for {name}.", ["Noted."],
+            session_id="sess-still-runs",
+        )
+    assert stages(events, "block") == []
+    assert one(events, "answer.done")
+
+
+def test_two_sessions_do_not_contaminate_each_other(runtime):
+    drive(runtime, "Refund Priya Sharma.", ["Done."], session_id="sess-a")
+    events = drive(runtime, "Refund Rajesh Kumar.", ["Done."], session_id="sess-b")
+    risk = one(events, "session.risk")
+    assert risk["turns"] == 1
+    assert risk["distinct_records"] == 1
+
+
+def test_the_session_event_carries_no_prompt_and_no_value(runtime):
+    """Same reference-only discipline as the audit entry (D4, IDEATION 3)."""
+    events = drive(runtime, "Refund Priya Sharma 45230.", ["Done."], session_id="sess-clean")
+    risk = one(events, "session.risk")
+    blob = repr(risk)
+    assert "Priya" not in blob and "Sharma" not in blob and "45230" not in blob
+
+
+def test_agent_steps_accumulate_toward_the_step_budget(runtime):
+    events = drive(
+        runtime, "Refund Priya Sharma.", ["Done."],
+        session_id="sess-agent", agent_steps=41,
+    )
+    risk = one(events, "session.risk")
+    assert risk["agent_steps"] == 41
+    assert risk["over_budget"]
+    assert "agent sprawl" in risk["reasons"][0]
     assert one(events, "scan.inbound")["side"] == "inside"

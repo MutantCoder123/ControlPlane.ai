@@ -1,7 +1,9 @@
 # DEMO SCRIPT — the Round 2 video
 
-**Target: 7 minutes.** Cut marks are noted if you need 5.
-Nine beats, because that is what D22 says fits.
+**Target: 8:40, inside a 10-minute budget.** Cut marks are noted if you need 5.
+Eleven beats — Phase 7 added session risk (beat 6) and folded the
+jurisdiction floor into Profiles (beat 7), which is why this runs a minute and
+a half longer than the nine-beat cut D22 originally sized.
 
 **How to use this.** Each beat has four blocks:
 
@@ -45,6 +47,8 @@ python scripts/warm_demo.py
 - [ ] The dot next to `llama3.2:1b` at the top right of the dashboard is green
 - [ ] `/queue` shows **3 pending items**
 - [ ] `/verify` shows a chain that verifies (you have not tampered yet)
+- [ ] `/policy`'s jurisdiction selector is on **none** (a clean server starts
+      this way; if you tested it beforehand, reset it before recording)
 - [ ] Browser at 1600×1000 or wider, zoom 100%, dark room, no notifications
 - [ ] The tab bar and bookmarks are hidden (F11 full screen is fine)
 
@@ -298,7 +302,47 @@ about coverage).
 
 ---
 
-## Beat 6 — One size does not fit all · 4:20–5:05 · *45s*
+## Beat 6 — No single turn looks wrong · 4:20–5:05 · *45s*
+
+**SCREEN:** Transit.
+
+**DO:**
+1. Click the preset **No single turn looks wrong**
+2. Click **New session** so the counter starts from zero on camera
+3. Click **Run 4 turns** and let it fire all four
+
+**SAY:**
+
+> One more thing this checkpoint watches for, and it's easy to miss because no
+> single request looks wrong.
+>
+> Four requests, four different customers, each one an ordinary internal
+> lookup. Watch the panel on the left, not the answer.
+>
+> *(the four turns run)*
+>
+> Every turn was fine on its own. But the fourth trips a warning — this session
+> has now touched four different customer records, and this route caps that at
+> three. That is the brief's own example: multi-turn and agentic use "introduce
+> compounding risk, where one questionable output can shape several downstream
+> decisions." Nothing here was one bad output — it's the accumulation.
+>
+> And notice what the panel is built from: a turn count, a count of distinct
+> records, nothing else. No transcript, no prompt, no answer. We catch the
+> pattern without keeping the conversation that would let us catch it any other
+> way — which is the same statelessness argument as everywhere else in this
+> product, just applied across requests instead of within one.
+
+**PROOF:** the session panel's counter climbing turn by turn, the warning
+firing on the fourth, and the caption *"counters only — no prompt, no
+response, no value"* sitting under it the whole time.
+
+**COVERS:** the multi-turn / agentic compounding-risk complexity, named
+directly in the brief · Governance (a cumulative budget, set per profile).
+
+---
+
+## Beat 7 — One size does not fit all · 5:05–6:30 · *85s*
 
 **SCREEN:** click **PROFILES** in the top navigation.
 
@@ -307,6 +351,9 @@ about coverage).
 2. Click **Tighten by 0.15** on `customer-support`
 3. Let the diff table appear
 4. Scroll down, click **Try to exempt API keys**
+5. Set the jurisdiction selector to **European Union**
+6. Point at the clamped-floor panel that appears
+7. Click **Try to loosen below the European Union floor**
 
 **SAY:**
 
@@ -336,16 +383,31 @@ about coverage).
 > That is me trying to turn off password blocking. It refuses, and it tells me
 > why. There is no legitimate reason to send a password to a model, so it isn't
 > offered as a setting somebody can switch off at five o'clock on a Friday.
+>
+> One more dimension. Rules don't just vary by use case — they vary by
+> geography, and they change over time. *(select European Union)* Watch what
+> just happened to all three profiles. This is a floor, not a preference: a
+> profile can be stricter than its jurisdiction demands, but it can never be
+> looser. Every one of those clamps is marked, so nobody has to take our word
+> for which numbers moved.
+>
+> And I can't get around it by trying. *(click the loosen button)* I just asked
+> to relax our strictest profile past what the floor allows. Look at the
+> fingerprint — identical, before and after. The request compiled fine. It just
+> didn't do anything, because the floor held.
 
 **PROOF:** the fingerprint before/after, the diff table, the compiler's refusal
-message in its own words.
+message in its own words; then the jurisdiction diff panel showing several
+clamped values with their floor badges; then the identical-fingerprint result
+after trying to loosen past the floor.
 
 **COVERS:** Governance (configurable policy layer) · varying by use case,
-geography and risk appetite · regulation that changes over time.
+geography and risk appetite · regulation that changes over time — this time
+with a live mechanism behind "geography," not just a field on the profile.
 
 ---
 
-## Beat 7 — When a person is worth interrupting · 5:05–5:45 · *40s*
+## Beat 8 — When a person is worth interrupting · 6:30–7:10 · *40s*
 
 **SCREEN:** click **REVIEW**.
 
@@ -388,7 +450,7 @@ Governance.
 
 ---
 
-## Beat 8 — Can you trust the log? · 5:45–6:15 · *30s*
+## Beat 9 — Can you trust the log? · 7:10–7:40 · *30s*
 
 **SCREEN:** click **CHAIN**.
 
@@ -421,7 +483,7 @@ Governance.
 
 ---
 
-## Beat 9 — The numbers, and what they can't tell you · 6:15–6:55 · *40s*
+## Beat 10 — The numbers, and what they can't tell you · 7:40–8:20 · *40s*
 
 **SCREEN:** click **MEASURES**.
 
@@ -471,7 +533,7 @@ distribution.
 
 ---
 
-## Beat 10 — Close · 6:55–7:15 · *20s*
+## Beat 11 — Close · 8:20–8:40 · *20s*
 
 **SCREEN:** back to Transit, the round-trip result still on screen.
 
@@ -495,29 +557,29 @@ Every item the brief lists, and where it appears.
 | Area | Beat | What we show |
 |---|---|---|
 | **Detection techniques** | 1, 4, 5 | Known-value matching against the company's own records; a pattern + checksum tier underneath (Luhn, Verhoeff, mod-97) as the floor; entity-provenance checking for made-up facts. No AI-as-judge on the fast path — it would be non-deterministic where we need determinism |
-| **Decision logic** | 2, 3, 7 | Four tiers: allow, annotate, review, block. Confidence × severity × profile. Humans pulled in on the middle of the confidence range, and on routes where the law requires it |
+| **Decision logic** | 2, 3, 8 | Four tiers: allow, annotate, review, block. Confidence × severity × profile. Humans pulled in on the middle of the confidence range, and on routes where the law requires it |
 | **Architecture** | 1, 2, 3 | Pre-response gate on the irreversible checks; post-hoc on the reversible ones. Zero network calls on the decision path — policy is compiled ahead of time and read from memory |
-| **Governance** | 6, 8 | Per-use-case policy profiles with content fingerprints, hot-swappable, with a readable diff; a hash-chained audit trail |
-| **Feedback loops** | 7 | Reviewer verdicts aggregate into proposed policy changes with the evidence attached. Thresholds and exception lists, never model weights |
-| **Metrics & monitoring** | 9 | False positives measured, false negatives estimated with planted canaries and a confidence interval; cost as gross / overhead / net; an explicit "not measured" list |
+| **Governance** | 6, 7, 9 | Per-use-case policy profiles with content fingerprints, hot-swappable, with a readable diff; jurisdiction floors clamped on top of that, never looser; a hash-chained audit trail |
+| **Feedback loops** | 8 | Reviewer verdicts aggregate into proposed policy changes with the evidence attached. Thresholds and exception lists, never model weights |
+| **Metrics & monitoring** | 10 | False positives measured, false negatives estimated with planted canaries and a confidence interval; cost as gross / overhead / net; an explicit "not measured" list |
 
 ### Real-world complexities
 
 | Complexity | Beat | How we handle it |
 |---|---|---|
-| Different use cases, different risk and latency | 6 | The use case *is* the policy unit. Three profiles, different thresholds, different buffering |
+| Different use cases, different risk and latency | 7 | The use case *is* the policy unit. Three profiles, different thresholds, different buffering |
 | Bias / hallucination / privacy overlap | 2 | We don't categorise by risk name. We split by whether the harm can be undone, which is the axis that actually decides what to do |
-| No real-time ground truth | 9 | We never claim a fact is false. We say it has no source, and hand the reader the exact thing to check |
-| Over-flagging vs under-flagging | 4, 7 | A per-profile flag budget, and no flag without something actionable to show. Tuned, and we say it is tuned |
-| Multi-turn and agents compound risk | — | Stated as out of scope, with the architectural answer given in prose. Say it in Q&A rather than claiming it |
-| Regulation differs by geography and industry | 6 | Policy is data, not code — compiled, versioned, diffable. Geography is a field on the profile |
+| No real-time ground truth | 10 | We never claim a fact is false. We say it has no source, and hand the reader the exact thing to check |
+| Over-flagging vs under-flagging | 4, 8 | A per-profile flag budget, and no flag without something actionable to show. Tuned, and we say it is tuned |
+| Multi-turn and agents compound risk | **6** | **Session-level counters catch compounding disclosure across turns without storing a transcript — shown live, not just argued in Q&A** |
+| Regulation differs by geography and industry | **7** | **A jurisdiction is a floor every profile is clamped against, enforced by the compiler — not a field nothing reads** |
 | API-only access to the model | 1 | We work entirely at the input/output layer, which is the only layer available. That constraint shaped the whole design |
 
 ### Reference parameters
 
 | Parameter | Where |
 |---|---|
-| Multiple use cases at once | Three named profiles, shown in beat 6 |
+| Multiple use cases at once | Three named profiles, shown in beat 7 |
 | Tens of thousands of interactions per week | ~30,000/week assumption stated in beat 0; traffic mix 60/30/10 in the seed data |
 | Mixed governance of internal data | 70/30 governed/ungoverned in the seed data, demonstrated in beat 5 |
 
@@ -525,9 +587,10 @@ Every item the brief lists, and where it appears.
 
 ## If you only have five minutes
 
-Drop beat 5 (fold one sentence of it into beat 4) and shorten beat 6 to the
-three profile cards plus the refusal. Keep everything else. That lands at
-about 5:10.
+Drop beat 5 (fold one sentence of it into beat 4), drop beat 6 (session risk —
+say it in Q&A instead, the D4 entry in DRAWBACK.md is the answer), and
+shorten beat 7 to the three profile cards plus the refusal, dropping the
+jurisdiction selector. Keep everything else. That lands at about 5:20.
 
 **Never cut:** beat 1 and beat 3. Beat 1 is the product. Beat 3 is the
 argument that the product is built in the right order.

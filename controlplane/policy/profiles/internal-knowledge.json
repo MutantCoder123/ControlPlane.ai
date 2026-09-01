@@ -7,5 +7,8 @@
   "cost": {
     "cache_enabled": true,
     "max_output_tokens": 1500
+  },
+  "session": {
+    "max_records_per_session": 3
   }
 }

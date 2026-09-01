@@ -33,6 +33,7 @@ from pathlib import Path
 from controlplane.policy.profile import PolicyError, Profile, compile_profile
 
 DEFAULT_PROFILE_DIR = Path(__file__).parent / "profiles"
+DEFAULT_JURISDICTION_DIR = Path(__file__).parent / "jurisdictions"
 BASE_FILENAME = "_base.json"
 
 
@@ -49,6 +50,11 @@ class PolicyBundle:
     profiles: dict[str, Profile]
     published_at: str
     source: str = ""
+    #: The jurisdiction floor this bundle was compiled under, if any - a
+    #: display field, not something a profile is fingerprinted against
+    #: directly (the floor's effect is already baked into each profile's own
+    #: fingerprint via the values it clamped).
+    jurisdiction: str | None = None
 
     def get(self, name: str) -> Profile | None:
         return self.profiles.get(name)
@@ -127,21 +133,44 @@ class PolicyStore:
 class ControlPlane:
     """Authoring side: read definitions, compile, validate, publish."""
 
-    def __init__(self, profile_dir: str | Path = DEFAULT_PROFILE_DIR) -> None:
+    def __init__(
+        self,
+        profile_dir: str | Path = DEFAULT_PROFILE_DIR,
+        jurisdiction_dir: str | Path = DEFAULT_JURISDICTION_DIR,
+    ) -> None:
         self.profile_dir = Path(profile_dir)
+        self.jurisdiction_dir = Path(jurisdiction_dir)
         self._version = 0
 
-    def compile_bundle(self, overrides: dict[str, dict] | None = None) -> PolicyBundle:
+    def compile_bundle(
+        self,
+        overrides: dict[str, dict] | None = None,
+        jurisdiction: str | None = None,
+    ) -> PolicyBundle:
         """Compile every definition on disk into one versioned bundle.
 
         `overrides` patches definitions in memory without touching the files -
         which is how the dashboard changes a policy live without needing
         write access to the repo.
+
+        `jurisdiction` names a file in `jurisdiction_dir` (e.g. "eu" for
+        eu.json) whose values become a FLOOR every profile is clamped
+        against - see `profile.py`'s `_clamp_to_floor`. Omitted, profiles
+        compile exactly as authored.
         """
         base = self._read(self.profile_dir / BASE_FILENAME) if (
             self.profile_dir / BASE_FILENAME
         ).exists() else {}
         base.pop("name", None)
+
+        floor: dict = {}
+        if jurisdiction:
+            floor_path = self.jurisdiction_dir / f"{jurisdiction}.json"
+            if not floor_path.exists():
+                raise PolicyError(
+                    f"unknown jurisdiction {jurisdiction!r}; known: {self.list_jurisdictions()}"
+                )
+            floor = self._read(floor_path)
 
         profiles: dict[str, Profile] = {}
         for path in sorted(self.profile_dir.glob("*.json")):
@@ -150,7 +179,7 @@ class ControlPlane:
             definition = self._read(path)
             if overrides and definition.get("name") in overrides:
                 definition = _deep_patch(definition, overrides[definition["name"]])
-            profile = compile_profile(definition, base=base)
+            profile = compile_profile(definition, base=base, jurisdiction=floor)
             if profile.name in profiles:
                 raise PolicyError(f"duplicate profile name {profile.name!r}")
             profiles[profile.name] = profile
@@ -164,7 +193,20 @@ class ControlPlane:
             profiles=profiles,
             published_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             source=str(self.profile_dir),
+            jurisdiction=jurisdiction,
         )
+
+    def list_jurisdictions(self) -> list[str]:
+        if not self.jurisdiction_dir.exists():
+            return []
+        return sorted(p.stem for p in self.jurisdiction_dir.glob("*.json"))
+
+    def jurisdiction_info(self, code: str) -> dict:
+        path = self.jurisdiction_dir / f"{code}.json"
+        if not path.exists():
+            raise PolicyError(f"unknown jurisdiction {code!r}")
+        data = self._read(path)
+        return {"code": code, "name": data.get("name", code), "description": data.get("description", "")}
 
     def store(self, default_profile: str | None = None) -> PolicyStore:
         """Compile once and hand the data plane its artefact."""

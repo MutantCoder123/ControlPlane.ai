@@ -43,6 +43,7 @@ from controlplane.demo import events as ev
 from controlplane.engine.placeholders import find_placeholders
 from controlplane.engine.substitute import SubstitutionEngine
 from controlplane.feedback.loop import FeedbackAggregator, ReviewQueue
+from controlplane.feedback.session import SessionRiskTracker
 from controlplane.metrics.registry import MetricsRegistry
 from controlplane.policy.store import ControlPlane
 from controlplane.quality import checks
@@ -83,6 +84,11 @@ class DemoRuntime:
         self.metrics = MetricsRegistry()
         self.queue = ReviewQueue()
         self.feedback = FeedbackAggregator()
+        #: Cumulative multi-turn / agent-step risk (D4, Phase 7). Counters
+        #: only - see feedback/session.py. Budgets come from each profile's
+        #: `SessionPolicy`, not from this tracker's constructor, so the same
+        #: instance serves every profile with its own caps.
+        self.sessions = SessionRiskTracker()
 
         # Every policy publish writes its own diff to the chain.
         from controlplane.audit.chain import attach_to_store
@@ -91,10 +97,25 @@ class DemoRuntime:
 
     # -- the pipeline ------------------------------------------------------
 
-    async def run(self, prompt: str, *, profile_name: str | None = None, team: str = "support"):
+    async def run(
+        self,
+        prompt: str,
+        *,
+        profile_name: str | None = None,
+        team: str = "support",
+        session_id: str | None = None,
+        agent_steps: int = 0,
+    ):
         """One request, narrated. Yields dicts from `events.EventStream`."""
         stream = ev.EventStream()
-        request_id = uuid.uuid4().hex[:12]
+        # Prefixed, not bare hex: a bare 12-char hex id has a ~0.3% chance of
+        # landing all-digits (uuid4's hex alphabet is 0-9a-f, so 10/16 per
+        # char), which the audit log's own guard then refuses to write as a
+        # possible card or account number (`\b\d{12,19}\b`). Flaky in tests,
+        # and a live crash risk on stage. The prefix breaks the word boundary
+        # the guard's pattern needs, permanently, rather than just making the
+        # collision rarer.
+        request_id = f"req_{uuid.uuid4().hex[:12]}"
         profile = self.store.profile_for(profile_name)
 
         yield stream.emit(
@@ -161,6 +182,32 @@ class DemoRuntime:
         yield stream.emit(ev.AUDIT_APPEND, entry=ev.audit_payload(entry))
 
         self.metrics.record_decision(decision, latency_ms=scan_ms)
+
+        # -- 2b. cumulative session risk (D4) ------------------------------
+        # Multi-turn and agent-step compounding, caught by counting rather
+        # than by remembering. `session_id` is supplied by the caller - we
+        # never mint one, because minting one would let us correlate traffic
+        # we have no business correlating. No id, no tracking: an anonymous
+        # request has no session to accumulate against.
+        if session_id:
+            verdict = self.sessions.observe(
+                session_id,
+                findings=scanned.findings,
+                blocked=decision.blocked or scanned.blocked,
+                agent_steps=agent_steps,
+                max_records=profile.session.max_records_per_session,
+                max_agent_steps=profile.session.max_agent_steps,
+            )
+            yield stream.emit(
+                ev.SESSION_RISK,
+                side="inside",
+                **ev.session_payload(
+                    session_id,
+                    verdict,
+                    max_records=profile.session.max_records_per_session,
+                    max_agent_steps=profile.session.max_agent_steps,
+                ),
+            )
 
         if decision.needs_human:
             for item in self.queue.enqueue_decision(decision, request_id=request_id):

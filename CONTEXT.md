@@ -5,8 +5,9 @@ session, a new model, or a teammate joining mid-stream. Everything below is
 *state*: what exists, what it does, what is decided, and what is left. The
 reasoning lives in the linked documents; this file is the map.
 
-Last updated: 2026-08-30 · **377 tests green** on Track A alone, ~405 with
-Track B merged. Phase 6 part one (the dashboard) is built.
+Last updated: 2026-08-31 · **401 tests green** on Track A alone, ~430 with
+Track B merged. Phase 6 (the dashboard) and Phase 7 (session risk +
+jurisdiction floors) are both built.
 
 ---
 
@@ -47,15 +48,15 @@ Full reasoning: [IDEATION.md](IDEATION.md) §3, §6, §9.2–§9.4.
 
 Python 3.13 · FastAPI at the edge · **stdlib-only engine** · pytest.
 
-### Track A — `controlplane/` (complete through Phase 5)
+### Track A — `controlplane/` (complete through Phase 7)
 
 | Package | What it does | Part |
 |---|---|---|
 | `engine/` | Substitution engine: known-value store + Bloom filter, checksum patterns (Luhn / Verhoeff / mod-97), placeholder mint & restore, `RequestScope` for placeholder identity across a multi-part request | P3 |
-| `policy/` | Route profiles compiled to fingerprinted artefacts, hot-swappable | P2 |
+| `policy/` | Route profiles compiled to fingerprinted artefacts, hot-swappable, now with a jurisdiction-floor clamp layer (Phase 7, D29) | P2 |
 | `audit/` | Hash-chained append-only log — tamper-**evident**, not tamper-proof | P8 |
 | `decision/` | Four tiers — allow / annotate / review / block — resolved from severity × confidence × profile | P6 |
-| `feedback/` | Reviewer outcomes → threshold adjustment, in the *control* plane only | P9 |
+| `feedback/` | Reviewer outcomes → threshold adjustment, in the *control* plane only; `session.py` tracks multi-turn/agent-step budgets from counters only (Phase 7, D4) | P9 |
 | `metrics/` | Seeded canaries, Wilson-interval FN estimation, metric registry | P10 |
 | `cost/` | Gross / overhead / net ledger — the flattering number cannot be read alone | P11 |
 | `stream/` | Commit-point buffer: sentence / 40 tokens / 250 ms, with overlap window | P4 |
@@ -131,7 +132,7 @@ needs a good answer, not an implementation.
 | Semantic caching (D13) | The similarity threshold is a **correctness** risk, not a cost one — too loose and you serve the answer to a different question. Exact-match prefix hashing instead. |
 | NER model (D10) | Non-deterministic and slow on the synchronous path; it would undo the determinism claim that makes our detection tier credible. Gap stated openly in prose. |
 | Real-time bias detection (D12) | Structurally impossible on a single response in isolation. |
-| Multi-turn state (D4) | Breaks the statelessness positioning, which is idea #1. |
+| Multi-turn *content* memory (D4) | Breaks the statelessness positioning, which is idea #1. Cumulative risk *across* turns is tracked from counters instead — see `feedback/session.py` and Phase 7. |
 | Envoy / gRPC / Rust | The check costs milliseconds in any language; the model call costs 1–2 seconds. Buys nothing measurable, costs two days. |
 
 ---
@@ -165,10 +166,14 @@ decision to *fix* or *answer*. The ones that shape everything:
 | 4. Measurement & Cost | P10, P11 | ✅ |
 | 5. Stream & Quality | P4, P7 | ✅ |
 | 6. Surface & Delivery | P12 dashboard | ✅ |
+| 7. Brief alignment | Session risk + jurisdiction floors (D4, D29) | ✅ |
 | **6. Surface & Delivery** | **P14 demo cut** | **in progress — the only work left** |
 
 P5 (pre-flight gate) is orchestration over Track B's gateway and lands with
-integration rather than as a phase of its own.
+integration rather than as a phase of its own. Phase 7 sits ahead of P14 in
+this table because it landed after Phase 6 but closes gaps the brief names
+directly, rather than being part of the surface/delivery work P14 covers -
+see [PHASE-7-PLAN.md](PHASE-7-PLAN.md).
 
 ---
 
@@ -211,3 +216,4 @@ Everything else in this repo is in service of that moment.
 | Feature list for UI/UX generation | [FEATURE_CONTEXT.md](FEATURE_CONTEXT.md) |
 | Per-track build briefs | [TRACK-A.md](TRACK-A.md) · [TRACK-B.md](TRACK-B.md) |
 | The dashboard: audit, design, build order | [PHASE-6-PLAN.md](PHASE-6-PLAN.md) |
+| Session risk + jurisdiction floors, in detail | [PHASE-7-PLAN.md](PHASE-7-PLAN.md) |

@@ -1,0 +1,11 @@
+{
+  "name": "India",
+  "description": "Illustrative jurisdictional floor, framed on the DPDP Act's consent and purpose-limitation themes. This is a mechanism for expressing jurisdiction-specific policy, not an implementation of the statute, and not legal advice.",
+  "audit_level": "standard",
+  "decision": {
+    "block_at": 0.85
+  },
+  "session": {
+    "max_records_per_session": 15
+  }
+}

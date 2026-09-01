@@ -12,17 +12,23 @@ import { get, post } from '@/lib/api';
  */
 export default function Profiles() {
   const [version, setVersion] = useState(null);
+  const [jurisdiction, setJurisdiction] = useState(null);
+  const [jurisdictions, setJurisdictions] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [result, setResult] = useState(null);
+  const [floorResult, setFloorResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
   const load = () =>
     get('/demo/profiles')
-      .then((d) => { setProfiles(d.profiles); setVersion(d.version); })
+      .then((d) => { setProfiles(d.profiles); setVersion(d.version); setJurisdiction(d.jurisdiction); })
       .catch((e) => setErr(e.message));
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    get('/demo/jurisdictions').then((d) => setJurisdictions(d.options)).catch(() => {});
+  }, []);
 
   const patch = async (profile, section, key, value) => {
     setBusy(true); setErr(null);
@@ -32,6 +38,18 @@ export default function Profiles() {
     } catch (e) {
       setErr(e.message);
       setResult(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const applyJurisdiction = async (code) => {
+    setBusy(true); setErr(null); setResult(null);
+    try {
+      setFloorResult(await post('/demo/jurisdiction', { code: code || null }));
+      await load();
+    } catch (e) {
+      setErr(e.message);
     } finally {
       setBusy(false);
     }
@@ -47,6 +65,30 @@ export default function Profiles() {
         content fingerprint. Change one here and the data plane picks it up on the next request —
         <strong> with no restart and no network call on the hot path</strong>.
       </p>
+
+      <section className="panel" style={{ marginBottom: 20 }}>
+        <div className="panel-body" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <span className="panel-title" style={{ fontSize: 13.5 }}>Jurisdiction</span>
+          <select
+            value={jurisdiction ?? ''}
+            disabled={busy}
+            onChange={(e) => applyJurisdiction(e.target.value)}
+          >
+            <option value="">none — profiles run exactly as authored</option>
+            {jurisdictions.map((j) => (
+              <option key={j.code} value={j.code}>{j.name}</option>
+            ))}
+          </select>
+          {jurisdiction && (
+            <span className="chip mono">
+              {jurisdictions.find((j) => j.code === jurisdiction)?.name}
+            </span>
+          )}
+          <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>
+            a floor every profile is clamped against — stricter is always allowed, looser never is
+          </span>
+        </div>
+      </section>
 
       {err && <div className="note" data-kind="stop" style={{ marginBottom: 16 }}>{err}</div>}
 
@@ -70,6 +112,8 @@ export default function Profiles() {
               <Row k="hold window" v={`${p.streaming.overlap_chars} chars`} />
               <Row k="hallucination tier" v={p.quality.hallucination_tier} />
               <Row k="exemptions" v={p.decision.exempt.length ? p.decision.exempt.join(', ') : 'none'} />
+              <Row k="session record cap" v={p.session.max_records_per_session} />
+              <Row k="audit level" v={p.audit_level} />
 
               <div className="composer-row" style={{ marginTop: 14 }}>
                 <button
@@ -94,6 +138,60 @@ export default function Profiles() {
         ))}
       </div>
 
+      {floorResult && (
+        <section className="panel" style={{ marginTop: 16 }} data-role="session">
+          <div className="panel-head">
+            <span className="panel-title">
+              {floorResult.jurisdiction
+                ? `Clamped to the ${jurisdictions.find((j) => j.code === floorResult.jurisdiction)?.name} floor`
+                : 'Floor cleared — profiles run as authored'}
+            </span>
+            <span className="chip mono">policy v{floorResult.version}</span>
+          </div>
+          <div className="panel-body">
+            {Object.values(floorResult.profiles).every((p) => Object.keys(p.clamped).length === 0) ? (
+              <p className="payload-empty">
+                {floorResult.jurisdiction
+                  ? 'nothing moved — every profile already meets this floor on its own'
+                  : 'no floor in force'}
+              </p>
+            ) : (
+              Object.entries(floorResult.profiles).map(([name, p]) => (
+                Object.keys(p.clamped).length > 0 && (
+                  <div key={name} style={{ marginBottom: 14 }}>
+                    <div className="composer-row" style={{ marginBottom: 6 }}>
+                      <span className="chip">{name}</span>
+                      <span className="hash mono">
+                        {p.fingerprint.before} → {p.fingerprint.after}
+                      </span>
+                    </div>
+                    <table className="grid">
+                      <thead><tr><th>Path</th><th>Was</th><th>Floor</th></tr></thead>
+                      <tbody>
+                        {Object.entries(p.clamped).map(([path, [was, now]]) => (
+                          <tr key={path}>
+                            <td className="mono">{path}</td>
+                            <td className="mono" style={{ color: 'var(--text-faint)' }}>{was}</td>
+                            <td className="mono" style={{ color: 'var(--inside)' }}>
+                              {now} <span className="chip" data-kind="warn" style={{ marginLeft: 6 }}>clamped by floor</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              ))
+            )}
+            <div className="note" style={{ marginTop: 8 }}>
+              A profile may be stricter than its jurisdiction demands; it may never be looser.
+              Nothing here changed which profile you authored — only what the compiler will let
+              it get away with.
+            </div>
+          </div>
+        </section>
+      )}
+
       {result && (
         <section className="panel" style={{ marginTop: 16 }}>
           <div className="panel-head">
@@ -103,20 +201,27 @@ export default function Profiles() {
             </span>
           </div>
           <div className="panel-body">
-            <table className="grid">
-              <thead>
-                <tr><th>Path</th><th>Was</th><th>Now</th></tr>
-              </thead>
-              <tbody>
-                {Object.entries(result.diff).map(([path, [was, now]]) => (
-                  <tr key={path}>
-                    <td className="mono">{path}</td>
-                    <td className="mono" style={{ color: 'var(--text-faint)' }}>{was}</td>
-                    <td className="mono" style={{ color: 'var(--inside)' }}>{now}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {Object.keys(result.diff).length === 0 ? (
+              <p className="payload-empty">
+                nothing changed — the fingerprint is identical, so this request had no effect
+                {jurisdiction && ', most likely because the jurisdiction floor held it where it was'}
+              </p>
+            ) : (
+              <table className="grid">
+                <thead>
+                  <tr><th>Path</th><th>Was</th><th>Now</th></tr>
+                </thead>
+                <tbody>
+                  {Object.entries(result.diff).map(([path, [was, now]]) => (
+                    <tr key={path}>
+                      <td className="mono">{path}</td>
+                      <td className="mono" style={{ color: 'var(--text-faint)' }}>{was}</td>
+                      <td className="mono" style={{ color: 'var(--inside)' }}>{now}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
             <div className="note" style={{ marginTop: 12 }}>
               Two checkpoints holding the same fingerprint are provably running the same policy,
               which is the question an auditor actually asks. And the reason the next request
@@ -148,13 +253,26 @@ export default function Profiles() {
               onClick={() => patch('internal-knowledge', 'inbound', 'block_credential', true)}>
               Try a misspelled key
             </button>
+            {jurisdiction && (
+              <button className="btn btn-danger" disabled={busy}
+                onClick={() => patch('internal-knowledge', 'decision', 'block_at', 0.97)}>
+                Try to loosen below the {jurisdictions.find((j) => j.code === jurisdiction)?.name} floor
+              </button>
+            )}
           </div>
           <div className="note" style={{ marginTop: 12 }} data-kind="cold">
-            All three are refused by <span className="mono">compile_profile</span>, with the reason.
-            Blocking a credential is not a tunable — there is no legitimate reason to send one to a
-            model, so it is not exposed as a setting a tired reviewer can switch off one override
-            at a time.
+            The first three are refused outright by <span className="mono">compile_profile</span>,
+            with the reason — blocking a credential is not a tunable, so it is never exposed as a
+            setting a tired reviewer can switch off one override at a time.
           </div>
+          {jurisdiction && (
+            <div className="note" style={{ marginTop: 8 }} data-kind="cold">
+              The fourth compiles fine and changes nothing: under a jurisdiction, a request for
+              <span className="mono"> block_at: 0.97</span> is silently held at the floor instead.
+              Same fingerprint before and after is the proof — check the diff panel below after
+              clicking it.
+            </div>
+          )}
         </div>
       </section>
     </>

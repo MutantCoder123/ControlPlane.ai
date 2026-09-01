@@ -278,6 +278,7 @@ h1.title {
 .panel[data-role='decision']       { background: rgba(22, 163, 74, 0.13); }
 .panel[data-role='after-delivery'] { background: rgba(245, 158, 11, 0.13); }
 .panel[data-role='cost']           { background: rgba(56, 189, 248, 0.13); }
+.panel[data-role='session']        { background: rgba(124, 58, 237, 0.09); }
 
 .panel-head {
   display: flex;
@@ -706,6 +707,7 @@ table.grid tr:last-child td { border-bottom: none; }
 .cols { display: grid; gap: 20px; }
 .cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
 .stat { display: flex; flex-direction: column; gap: 4px; }
 .stat .v {
@@ -799,6 +801,6 @@ pre.dump {
       rgba(249, 115, 22, 0.16), rgba(124, 58, 237, 0.10) 50%, rgba(37, 99, 235, 0.16));
   }
   .boundary-label { writing-mode: horizontal-tb; transform: none; }
-  .cols-2, .cols-3 { grid-template-columns: 1fr; }
+  .cols-2, .cols-3, .cols-4 { grid-template-columns: 1fr; }
   .tape-row { grid-template-columns: 44px 60px 110px 1fr; }
 }

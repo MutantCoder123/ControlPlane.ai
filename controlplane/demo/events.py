@@ -49,6 +49,7 @@ QUALITY_FINDING = "quality.finding"
 QUALITY_DONE = "quality.done"
 COST = "cost"
 AUDIT_APPEND = "audit.append"
+SESSION_RISK = "session.risk"
 ERROR = "error"
 DONE = "done"
 
@@ -134,6 +135,27 @@ def decision_payload(decision) -> dict:
             }
             for o in decision.outcomes
         ],
+    }
+
+
+def session_payload(session_id: str, verdict, *, max_records: int, max_agent_steps: int) -> dict:
+    """A `SessionVerdict` flattened for the wire - counters and reasons only.
+
+    Never a prompt, never a restored value, never a raw record - the same
+    reference-only discipline as the audit log, which is what makes this
+    checkable on screen rather than merely claimed (D4).
+    """
+    c = verdict.counters
+    return {
+        "session_id": session_id,
+        "turns": c.turns,
+        "distinct_records": c.distinct_records,
+        "agent_steps": c.agent_steps,
+        "findings": c.findings,
+        "blocks": c.blocks,
+        "over_budget": verdict.over_budget,
+        "reasons": verdict.reasons,
+        "limits": {"max_records_per_session": max_records, "max_agent_steps": max_agent_steps},
     }
 
 
