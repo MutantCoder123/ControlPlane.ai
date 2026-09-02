@@ -30,13 +30,18 @@ one line — its `base_url` — and nothing else.
 | Metrics + canaries (P10) | ✅ done | 22 |
 | Cost ledger (P11) | ✅ done | 25 |
 | Commit-point buffer (P4) | ✅ done | 28 |
-| Async quality checks (P7) | ✅ done (thin) | 25 |
+| Async quality checks (P7) | ✅ done (thin) | 57 |
 | Dashboard (P12) | ✅ done | 14 |
 | Session risk + jurisdiction floors (Phase 7 — D4, D29) | ✅ done | 21 |
+| Toxicity classifier (Phase 8 — D31) | ✅ done | 10 |
+| Dynamic bias probing (Phase 8 — D32) | ✅ done | 13 |
+| Hallucination depth: claim shapes + real confidence (Phase 8 — D33) | ✅ done | 19 |
 | Demo cut + repo (P14) | 🔨 in progress | |
 
-**401 tests, no network and no API key required.** The dashboard needs a local
-model; everything else runs offline.
+**442 tests, no network and no API key required to test.** The dashboard needs
+a local model; the toxicity check needs one pretrained classifier installed
+via `pip` (bundled weights, no separate download) — everything else runs
+offline.
 
 Scope and ordering: [BUILD-PLAN.md](BUILD-PLAN.md).
 
@@ -174,7 +179,10 @@ cannot escape:
 ```
 CLEAN STREAM  : Dear Priya Sharma, your refund of 45230 is approved. ...
 LEAKY STREAM  : ''  -> blocked: credential in response: api_key
-HALLUCINATION : not found in the source material: 2019, 45230, Circular
+HALLUCINATION : not found in the source material: Circular         (conf 0.65)
+              : due to unforeseen issues with our supplier's ...    (conf 0.59)
+                -> confidence includes the model's own real per-token
+                   probability as it generated each span, not a self-report
 BIAS PROBE    : same request, name changed (Priya -> Rajesh): reject -> advance
                 -> disparity 1.00 across 40 runs
 ```

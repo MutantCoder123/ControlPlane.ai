@@ -515,6 +515,37 @@ select {
 }
 .tok-real[data-fresh='true'] { animation: warmback 900ms ease-out; }
 
+/* D33 - hallucination/overclaim spans, highlighted where they actually sit
+ * in the answer, confidence embedded and visible (not just on hover). Both
+ * categories are ANNOTATE tier (never block), so both use the same --held
+ * family the tier chip already uses elsewhere - the shape differs, not the
+ * color, so a reader learns one "this needs a second look" language. These
+ * fade in a moment after the text itself, because that IS the architecture:
+ * annotated after delivery, never a reason to hold the response.
+ */
+.halluc-mark {
+  background: var(--held-glow);
+  border-bottom: 1.5px solid var(--held-mark);
+  color: var(--held);
+  padding: 1px 3px;
+  border-radius: 4px;
+  cursor: help;
+  font-weight: 500;
+  animation: annotate-in 500ms ease-out;
+}
+.halluc-mark.cat-overclaim { border-bottom-style: dashed; }
+.halluc-badge {
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 2px;
+  vertical-align: super;
+  opacity: 0.85;
+}
+@keyframes annotate-in {
+  from { background: transparent; border-bottom-color: transparent; }
+  to   { background: var(--held-glow); border-bottom-color: var(--held-mark); }
+}
+
 .caret {
   display: inline-block;
   width: 7px;

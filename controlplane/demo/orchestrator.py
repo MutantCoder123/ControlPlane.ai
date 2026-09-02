@@ -261,13 +261,38 @@ class DemoRuntime:
         answer = ""
         unrestored: list[str] = []
         blocked_outbound = None
+        # Real per-token confidence (D33), not a self-report: Ollama 0.33+
+        # returns the actual log-probability it assigned each token AS IT
+        # GENERATED IT. Accumulated here, in parallel with `raw_text`, and
+        # handed to the quality pass below - nothing about the tested
+        # commit-point buffer (D5/D6/D15) changes, this is purely additive.
+        # `chunk` is a `(text, token_logprobs)` tuple from the real model;
+        # test fakes yield bare strings, tolerated below, so this signal is
+        # simply absent (not faked) whenever there is no real model behind it.
+        logprob_trace: list[checks.TokenLogprob] = []
 
         try:
             async for chunk in _ollama_chunks(scanned.text):
-                raw_text += chunk
-                yield stream.emit(ev.STREAM_RAW, side="outside", chunk=chunk)
+                if isinstance(chunk, tuple):
+                    text, token_logprobs = chunk
+                else:
+                    text, token_logprobs = chunk, None
+                offset = len(raw_text)
+                raw_text += text
+                if token_logprobs:
+                    pos = offset
+                    for tok in token_logprobs:
+                        tok_text = tok.get("token", "")
+                        logprob_trace.append(checks.TokenLogprob(
+                            text=tok_text,
+                            logprob=tok.get("logprob", 0.0),
+                            start=pos,
+                            end=pos + len(tok_text),
+                        ))
+                        pos += len(tok_text)
+                yield stream.emit(ev.STREAM_RAW, side="outside", chunk=text)
 
-                releases = buffer.feed(chunk)
+                releases = buffer.feed(text)
                 if not releases:
                     yield stream.emit(
                         ev.BUFFER_HOLD,
@@ -396,37 +421,95 @@ class DemoRuntime:
         # -- 8. the reversible half, AFTER delivery ------------------------
         # IDEATION section 6. These run here, not before, and the t_ms on
         # these events is the proof: the reader already had their answer.
-        async for event in self._quality_pass(stream, answer, prompt, profile, request_id):
+        async for event in self._quality_pass(
+            stream, answer, prompt, profile, request_id,
+            raw_text=raw_text, logprob_trace=logprob_trace,
+        ):
             yield event
 
         yield stream.emit(ev.DONE, outcome="delivered")
 
     # -- async quality -----------------------------------------------------
 
-    async def _quality_pass(self, stream, answer, prompt, profile, request_id):
-        """Hallucination now; toxicity labelled, bias structurally elsewhere."""
-        if not checks.has_checkable_claims(answer):
-            yield stream.emit(
-                ev.QUALITY_DONE,
-                ran=[],
-                skipped="no numbers, dates or proper nouns - nothing to check",
+    async def _quality_pass(
+        self, stream, answer, prompt, profile, request_id,
+        *, raw_text: str = "", logprob_trace: list[checks.TokenLogprob] | None = None,
+    ):
+        """Hallucination (three claim shapes now) and toxicity; bias
+        structurally elsewhere.
+
+        Toxicity (D31) runs here unconditionally, for every profile, because
+        that is the async default IDEATION 10.2 always specified - a
+        profile's `toxicity_sync` flag is not read by this pass. See D31:
+        the severe-category synchronous exception stays unbuilt, so a
+        profile that sets `toxicity_sync: true` gets the same async check as
+        one that doesn't, today.
+
+        `has_checkable_claims` gates ONLY entity_not_in_source, not this whole
+        method. That check's entire premise is "a number or a proper noun
+        with no provenance" - an answer with neither has nothing for it to
+        find. Toxicity has no such premise: "your staff are incompetent
+        morons" contains no number, date or proper noun, so gating toxicity
+        behind the same filter would mean the check we just built never runs
+        on the exact kind of sentence it exists to catch. Caught while wiring
+        this in, before it shipped silently broken. The two new claim-shape
+        checks (D33) have the same property - overclaiming and unsupported
+        causal language need no entity either - so they run unconditionally
+        too, alongside toxicity.
+
+        `raw_text`/`logprob_trace` (D33) are threaded through to every check
+        so each can sharpen its own confidence from the model's REAL
+        per-token probability, when the running backend provides one -
+        never a self-report, and never required (every check degrades to
+        its base formula without them).
+        """
+        ran: list[str] = []
+        findings: list[tuple[checks.QualityFinding, str]] = []
+
+        if checks.has_checkable_claims(answer):
+            ran.append("entity_not_in_source")
+            findings += [
+                (f, "hallucination")
+                for f in checks.entity_not_in_source(
+                    answer, prompt, sources="",
+                    logprob_trace=logprob_trace, raw_text=raw_text,
+                )
+            ]
+
+        ran += ["overclaim", "unsupported_causal_claim", "toxicity"]
+        findings += [
+            (f, "overclaim")
+            for f in checks.find_absolute_claims(
+                answer, logprob_trace=logprob_trace, raw_text=raw_text,
             )
-            return
+        ]
+        findings += [
+            (f, "hallucination")
+            for f in checks.find_unsupported_causal_claims(
+                answer, prompt, sources="",
+                logprob_trace=logprob_trace, raw_text=raw_text,
+            )
+        ]
+        findings += [(f, "toxicity") for f in checks.toxicity(answer)]
 
-        findings = checks.entity_not_in_source(answer, prompt, sources="")
-        signals = [f.to_signal() for f in findings]
-
-        for finding, signal in zip(findings, signals):
+        for finding, category in findings:
+            signal = finding.to_signal(category=category)
             outcome = self.decisions.decide([signal], profile)
             yield stream.emit(
                 ev.QUALITY_FINDING,
                 side="inside",
                 check=finding.check,
+                category=category,
                 detail=finding.detail,
                 evidence=finding.evidence,
                 confidence=round(finding.confidence, 3),
                 # Shown so the number is auditable rather than oracular.
-                confidence_formula="min(0.9, 0.55 + 0.1 x entities_without_provenance)",
+                confidence_formula=finding.formula,
+                # Character offsets into `answer` (D33) - lets the dashboard
+                # highlight the exact flagged substring instead of only
+                # listing it below the response. None for whole-response
+                # findings (toxicity has no single span).
+                span=list(finding.span) if finding.span else None,
                 tier=outcome.tier.label,
                 reversible=True,
             )
@@ -449,12 +532,21 @@ class DemoRuntime:
                         reason=item.reason,
                     )
 
+        skipped = (
+            None if "entity_not_in_source" in ran
+            else "entity_not_in_source: no numbers, dates or proper nouns - nothing to check"
+        )
         yield stream.emit(
             ev.QUALITY_DONE,
-            ran=["entity_not_in_source"],
+            ran=ran,
+            skipped=skipped,
             not_built={
-                "toxicity": "off-the-shelf classifier in production; on the "
-                            "do-not-build list here (D23-labelled, not omitted)",
+                "toxicity_sync_exception": "D31 - the 'small set of severe "
+                                           "categories block synchronously' "
+                                           "exception in IDEATION 10.2 is not "
+                                           "implemented; toxicity always runs "
+                                           "here, async, regardless of a "
+                                           "profile's toxicity_sync flag",
                 "consistency_sampling": "D11 - sampling only detects RANDOM "
                                         "fabrication, and scores systematic "
                                         "failure as reliable",
@@ -470,11 +562,20 @@ def _count_restored(text: str, mapping: dict[str, str]) -> int:
 
 
 async def _ollama_chunks(prompt: str):
-    """Raw token chunks from the local model.
+    """Raw token chunks from the local model, paired with the REAL
+    log-probability the model assigned each one as it generated it.
+
+    Yields `(text, token_logprobs)` - `token_logprobs` is Ollama's own
+    `logprobs` list for this delta (D33), or `None` if the running server
+    predates 0.33 / doesn't expose it, in which case every downstream
+    consumer degrades gracefully to the pre-D33 behaviour rather than
+    crashing on a missing field.
 
     Kept behind a generator so the pipeline above has no HTTP in it and can be
     driven by a fake in tests - the same reason TRACK-B.md puts the provider
-    behind a small interface.
+    behind a small interface. Test fakes yield bare strings, not tuples; the
+    orchestrator tolerates both (see `run()`), so this is additive, not a
+    breaking change to the harness.
     """
     import json as _json
 
@@ -487,6 +588,7 @@ async def _ollama_chunks(prompt: str):
         "prompt": prompt,
         "stream": True,
         "options": {"temperature": 0.2, "seed": 20260830},
+        "logprobs": True,
     }
     async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=5.0)) as client:
         async with client.stream("POST", OLLAMA_URL, json=payload) as response:
@@ -497,6 +599,6 @@ async def _ollama_chunks(prompt: str):
                 data = _json.loads(line)
                 text = data.get("response", "")
                 if text:
-                    yield text
+                    yield text, data.get("logprobs")
                 if data.get("done"):
                     return

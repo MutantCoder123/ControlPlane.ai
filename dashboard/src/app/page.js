@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { get, post, runStream, usd, ms } from '@/lib/api';
-import { Marked, Spanned, RawStream } from '@/components/Marked';
+import { Marked, Spanned, RawStream, AnnotatedAnswer } from '@/components/Marked';
 
 const EMPTY = {
   open: null, scan: null, decision: null, dispatch: null,
@@ -365,7 +365,7 @@ export default function Transit() {
             </div>
           ) : s.answer ? (
             <p className="payload">
-              <Marked text={s.answer} needles={realValues} className="tok-real" fresh title="restored on the way out" />
+              <AnnotatedAnswer text={s.answer} findings={s.quality} realValueNeedles={realValues} fresh />
               {running && <span className="caret" />}
             </p>
           ) : (

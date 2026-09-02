@@ -267,15 +267,26 @@ Order is deliberate:
 
 1. **Identify** — key → team. Nothing works without attribution.
 2. **Budget** — estimate cost, refuse if over cap. Refusing here costs zero.
-3. **Injection** — protect the model from the user.
-4. **Inbound sensitive data** — protect the org from its own paste habit.
-5. **Route** — cheapest model that plausibly handles this.
+3. **Inbound sensitive data** — protect the org from its own paste habit.
+4. **Route** — cheapest model that plausibly handles this.
 
 **Critical correction to the original Gemini design:** it proposed
 forwarding upstream and cancelling on failure. You are billed the moment
 tokens are generated — you would block the request and still pay. Check
 first, dispatch second. This is what makes the cost pillar real instead
 of contradicting the safety pillar.
+
+**Injection detection was step 3 here through every earlier draft, and is
+deliberately gone — see [DRAWBACK.md](DRAWBACK.md) D30.** "Protect the model
+from the user" is the provider's job: they run RLHF and moderation endpoints
+with visibility into their own model's failure modes that we don't have and
+can't audit from outside, so a second detector calibrated blind adds cost and
+false positives without adding a defense they don't already do better. The
+one version of injection that *would* be ours — talking the model into
+reconstructing the real value behind a placeholder — has no target here,
+because substitution means the model was never given that value. There is
+nothing on its side of the boundary for an adversarial prompt to extract.
+Retired, not built.
 
 ---
 
@@ -412,6 +423,12 @@ Off-the-shelf classifier, milliseconds, on the **async path** — toxicity
 is reversible harm. Don't pay TTFB on every response for a probabilistic
 classifier that's wrong 5% of the time.
 
+**Built (D31, Phase 8):** `alt-profanity-check`, a pretrained classifier we
+import rather than train — the first and only exception to Track A's
+stdlib-only engine, taken over a heavier transformer option specifically to
+keep the "no network, offline" claim true. The severe-category synchronous
+exception below is not built; see D31 for why.
+
 Exception: a small set of severe categories block synchronously and we
 accept false positives.
 
@@ -430,6 +447,16 @@ Why it's strong: it produces **evidence, not a score**. "Classifier rated
 this 0.7 biased" is arguable. "Same CV, rejected under one name,
 advanced under another — here are both transcripts" is not. Runs as a
 scheduled job on sampled traffic, not per-request.
+
+**Generalised off a fixed template (D32, Phase 8):** the original build
+needed a `{}` slot authored in advance and a hardcoded outcome vocabulary
+("advance"/"reject"). `find_subject()` now locates the counterfactual slot
+in *any* prompt by reusing the hallucination check's own proper-noun
+detector; `parse_forced_choice()` reads the outcome words out of the
+prompt's own instruction instead of Python code. A prompt with no forced
+choice gets an honest free-text tier — transcripts, no invented label —
+rather than a fabricated rate. Live traffic sampling
+(`counterfactual_sample_rate`) is still not wired; see D32.
 
 ### 10.4 Rejected: masking bias terms before dispatch
 
@@ -531,6 +558,16 @@ false positives), and already-hedged claims.
 > bad arithmetic, reversed relations — it fails identically every time
 > and sampling scores it as reliable. That's the trap.
 
+**Two more rows built as lexical detectors (D33, Phase 8):** overclaiming
+("always", "guaranteed", "the only") and unsupported causal claims
+("because", "due to" followed by a reason absent from source) — not full
+entailment, but enough to catch hallucination with no number or proper
+noun in it at all, which the entity check alone was structurally blind to.
+Point fact and Attributed remain the entity check's territory (D27 already
+closed the fabricated-person case). Existence, Relational and Derived
+still need the entailment/reverse-question/recompute machinery this
+prototype does not build - see D33 in DRAWBACK.md.
+
 ### 11.5 The cascade — what triggers a check
 
 Resolves the circularity of "only check flagged responses" (nothing would
@@ -542,7 +579,10 @@ ever trigger).
   contain checkable claims"*, not *"we check 10% randomly to save money."*)
 - Token confidence dips — fluent sentence, low confidence exactly on a
   date or name. Classic fabrication fingerprint, free if the provider
-  exposes logprobs.
+  exposes logprobs. **Built (D33, Phase 8):** Ollama 0.33+ exposes real
+  per-token logprobs, confirmed live; read as a bounded, minority bonus on
+  top of the grounding-density base, never a self-report and never the
+  majority of the score - see D33.
 - **Entities in the answer absent from question and sources** — highest
   yield single check, pure set comparison.
 - Specificity density + absence of hedging: precise *and* certain is the
@@ -863,7 +903,7 @@ not spent making the demo work.
 - Pattern + checksum scanner
 - **Known-value matching** against a seeded fake customer database — the
   best demo moment: a *real customer's name* caught with a record reference
-- Pre-flight gate: budget, injection, routing
+- Pre-flight gate: budget, inbound scan, routing
 - Cost ledger + attribution dashboard
 - Prompt-prefix hashing to surface caching opportunities
 - Hash-chained audit log
@@ -890,6 +930,9 @@ not spent making the demo work.
   *looks* safe. Proposing it to a security-literate judge loses the panel.
 - Our own trained bias classifier
 - Any claim of real-time bias detection
+- **Prompt injection detection.** The provider already runs this with
+  visibility we don't have; the one variant that would be ours has no
+  target once real values never leave the building. See D30.
 
 ---
 
@@ -907,22 +950,22 @@ product.
 3. **Real customer data** — paste a real record, get a **correct, useful
    answer**, then show the audit log proving the model only ever saw a
    placeholder. **This is the whole pitch in fifteen seconds**
-4. **Injection blocked** at `cost_usd: 0.0` — refused before dispatch
-5. **Hallucination** — model cites a regulation that doesn't exist,
+4. **Hallucination** — model cites a regulation that doesn't exist,
    caught while streaming
-6. **Counterfactual** — same request, one name changed, two visibly
+5. **Counterfactual** — same request, one name changed, two visibly
    different outputs
-7. **Act, not just watch** — change a policy live, rerun, different result
-8. **Tamper the audit log** — verification fails on stage
-9. **The number** — their traffic, what it cost, what it would have cost
+6. **Act, not just watch** — change a policy live, rerun, different result
+7. **Tamper the audit log** — verification fails on stage
+8. **The number** — their traffic, what it cost, what it would have cost
 
-Step 9 is the most persuasive artefact in the pitch and needs no
+Step 8 is the most persuasive artefact in the pitch and needs no
 explanation.
 
-**Time budget — these nine steps do not fit.** The Grand Finale is a
-**10-minute pitch plus 5-minute Q&A**. Nine demo steps, plus problem framing,
-architecture and the closing number, is roughly 40 seconds each with no
-recovery time if anything stalls.
+**Time budget — these eight steps do not fit.** The Grand Finale is a
+**10-minute pitch plus 5-minute Q&A**. Eight demo steps, plus problem framing,
+architecture and the closing number, is roughly 45 seconds each with no
+recovery time if anything stalls. (A ninth step, injection detection, is not
+merely cut for time — it's retired from the design entirely; see D30 above.)
 
 Cut to a spine of four, each carrying a distinct claim:
 
@@ -930,10 +973,10 @@ Cut to a spine of four, each carrying a distinct claim:
 |---|---|
 | 3. Real customer data | The provider never saw the real record — *the* differentiator |
 | 2. Credential block | Irreversible harm stopped before release, not deleted after |
-| 7. Live policy change | We act, not just watch — and the control plane is real |
-| 9. The number | Measurable business impact, no explanation needed |
+| 6. Live policy change | We act, not just watch — and the control plane is real |
+| 8. The number | Measurable business impact, no explanation needed |
 
-Steps 1, 4, 5, 6 and 8 become slides or Q&A material we can pull up if asked.
+Steps 1, 4, 5 and 7 become slides or Q&A material we can pull up if asked.
 Every cut step is also build time saved — decide this *before* building, not on
 stage. See D22 in [DRAWBACK.md](DRAWBACK.md).
 

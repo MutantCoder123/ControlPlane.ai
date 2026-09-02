@@ -277,10 +277,91 @@ def test_the_hallucination_confidence_is_the_documented_formula(runtime):
         ["Contact Ramesh Krishnan on 4400 about 99999 rupees."],
     )
     finding = one(events, "quality.finding")
-    invented = finding["detail"].split()[0]
+    # detail reads "1 of N entities absent..." (D33: one finding per entity,
+    # sharing the same density-derived base) - N is the third word.
+    invented = finding["detail"].split()[2]
 
     assert finding["confidence"] == pytest.approx(min(0.9, 0.55 + 0.1 * int(invented)))
     assert "0.55 + 0.1" in finding["confidence_formula"]
+
+
+# --------------------------------------------------------------------------
+# D33 - real per-token confidence, span highlighting, two more claim shapes
+# --------------------------------------------------------------------------
+
+def test_a_flagged_entity_carries_its_answer_span(runtime):
+    """The span is what lets the dashboard highlight the exact substring,
+    not just list it below the response."""
+    answer = "Contact Ramesh Krishnan about 99999 rupees today."
+    events = drive(runtime, "Notes: Priya Sharma, balance 45230.", [answer])
+    findings = stages(events, "quality.finding")
+    halluc = [f for f in findings if f["check"] == "entity_not_in_source"]
+
+    assert halluc
+    for f in halluc:
+        start, end = f["span"]
+        assert answer[start:end] in f["evidence"]
+
+
+def test_toxicity_findings_carry_no_span(runtime):
+    """Toxicity describes the whole reply, not one substring - span is None,
+    not a made-up range."""
+    events = drive(
+        runtime, "How is my complaint being handled?",
+        ["your service is a joke and your staff are incompetent morons."],
+    )
+    toxic = [f for f in stages(events, "quality.finding") if f["check"] == "toxicity"]
+    assert toxic
+    assert toxic[0]["span"] is None
+
+
+def test_a_real_logprob_dip_sharpens_confidence_through_the_real_pipeline(runtime):
+    """Not a unit test of `_logprob_dip` in isolation - this drives the
+    ACTUAL orchestrator with a scripted (text, logprobs) chunk, the same
+    shape the real Ollama client yields, and checks the finding that comes
+    out the other end names the real signal."""
+    answer = "Contact Ramesh Krishnan about 99999 rupees today."
+    # One chunk, all tokens confident except "99999" - the classic
+    # fluent-except-for-the-fabricated-figure fingerprint (IDEATION 11.5).
+    tokens = [
+        ("Contact Ramesh Krishnan about ", -0.05),
+        ("99999", -3.0),
+        (" rupees today.", -0.05),
+    ]
+    chunk_text = "".join(t for t, _ in tokens)
+    logprobs = [{"token": t, "logprob": lp} for t, lp in tokens]
+
+    events = drive(
+        runtime, "Notes: Priya Sharma, balance 45230.",
+        [(chunk_text, logprobs)],
+    )
+    findings = stages(events, "quality.finding")
+    figure = next(f for f in findings if "99999" in f["evidence"])
+    name = next(f for f in findings if "Ramesh Krishnan" in f["evidence"])
+
+    assert "REAL per-token probability" in figure["confidence_formula"]
+    assert figure["confidence"] > name["confidence"]
+
+
+def test_overclaiming_language_is_flagged_with_no_entity_at_all(runtime):
+    events = drive(
+        runtime, "Will this plan work for me?",
+        ["This plan always works and is guaranteed to help."],
+    )
+    overclaims = [f for f in stages(events, "quality.finding") if f["category"] == "overclaim"]
+    assert overclaims
+    assert all(f["reversible"] for f in overclaims)
+
+
+def test_an_invented_reason_is_flagged_as_hallucination(runtime):
+    events = drive(
+        runtime, "Why was my request delayed?",
+        ["Your request was delayed because of a rare synchronisation fault."],
+    )
+    causal = [f for f in stages(events, "quality.finding")
+              if f["check"] == "unsupported_causal_claim"]
+    assert causal
+    assert causal[0]["category"] == "hallucination"
 
 
 def test_a_high_risk_route_sends_a_quality_finding_to_a_human(runtime):
@@ -300,6 +381,61 @@ def test_a_high_risk_route_sends_a_quality_finding_to_a_human(runtime):
     assert queued
     assert queued[0]["reason"] == "profile reviews every response"
     assert runtime.queue.pending
+
+
+# --------------------------------------------------------------------------
+# Toxicity (D31) - runs on every reply, not just ones with entities
+# --------------------------------------------------------------------------
+
+# Insult-laden but with no number, date or capitalised proper noun - the
+# exact shape that used to be invisible to the whole quality pass (see the
+# comment in `_quality_pass`), because `has_checkable_claims` gated toxicity
+# along with entity_not_in_source before this was caught and fixed.
+_TOXIC_REPLY = "your service is a joke and your staff are incompetent morons."
+
+
+def test_a_toxic_reply_with_no_entities_is_still_flagged(runtime):
+    events = drive(runtime, "How is my complaint being handled?", [_TOXIC_REPLY])
+    findings = stages(events, "quality.finding")
+
+    assert any(f["check"] == "toxicity" for f in findings), (
+        "toxicity must fire even when entity_not_in_source has nothing to check"
+    )
+
+
+def test_toxicity_never_blocks_a_delivered_answer(runtime):
+    """Reversible harm is annotated after the reader already has the answer -
+    the response must reach `answer.done` before the toxicity finding does."""
+    events = drive(runtime, "How is my complaint being handled?", [_TOXIC_REPLY])
+    done = one(events, "answer.done")
+    finding = one(events, "quality.finding")
+
+    assert done["answer"] == _TOXIC_REPLY
+    assert finding["seq"] > done["seq"]
+    assert finding["reversible"] is True
+
+
+def test_a_clean_reply_reports_toxicity_as_run_but_not_flagged(runtime):
+    """`ran` proves the check executed; an empty finding list proves it found
+    nothing - two different claims, and only the code can make both at once."""
+    events = drive(runtime, "How is my complaint being handled?", ["We are looking into it."])
+    done_quality = one(events, "quality.done")
+
+    assert "toxicity" in done_quality["ran"]
+    assert not any(f["check"] == "toxicity" for f in stages(events, "quality.finding"))
+
+
+def test_a_reply_with_no_entities_and_no_toxicity_still_runs_toxicity(runtime):
+    """The bug this replaces: an answer with nothing for entity_not_in_source
+    to check used to skip the ENTIRE pass, silently, including toxicity."""
+    events = drive(runtime, "How is my complaint being handled?", ["We are looking into it."])
+    done_quality = one(events, "quality.done")
+
+    # D33 added two more checks with the same "no entity required" property
+    # as toxicity - they run here too, unconditionally.
+    assert done_quality["ran"] == ["overclaim", "unsupported_causal_claim", "toxicity"]
+    assert "entity_not_in_source" not in done_quality["ran"]
+    assert done_quality["skipped"]
 
 
 # --------------------------------------------------------------------------

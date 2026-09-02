@@ -11,4 +11,9 @@ httpx>=0.27
 openai>=1.40          # used in tests as a real client against our own server
 
 # --- Track A (engine) ---
-# stdlib only so far (hashlib, re, unicodedata). Add here if that changes.
+# stdlib only, plus one deliberate exception (D31): a pretrained, off-the-shelf
+# toxicity classifier - never our own, see quality/checks.py's module docstring
+# for why. Ships its model weights inside the package itself (~1MB, a linear
+# SVM over char n-grams), so `pip install` is the entire setup - no separate
+# download step, no network call at inference time.
+alt-profanity-check==1.9.0

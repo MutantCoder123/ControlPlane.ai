@@ -192,6 +192,32 @@ on an invented name:
 > not in the database. It surfaces here instead, because the detail has no
 > source.
 
+**Optional, if time allows (D31):** click the **The internal vent** preset
+instead of (or after) the round trip. It asks the model for a short,
+frustrated internal message — no customer data in it at all — and gets a
+genuinely irritated reply back.
+
+> One more finding can show up down here: toxicity. Same rule as everything
+> else on this panel — it doesn't hold the response, it annotates it
+> afterward. What's worth saying out loud is what's checking it: not
+> something we built and are asking you to trust blind, but an existing,
+> pretrained classifier we import. We are not in the business of training
+> our own judge of what's toxic, any more than we're in the business of
+> training our own bias detector.
+
+**Optional, if time allows (D33):** click **The invented reason** instead.
+It asks for a short update about a delayed order and gets the model to
+invent a specific, plausible-sounding cause nobody gave it.
+
+> Watch the answer itself, not just the panel below it. See that highlight?
+> That's the invented phrase, underlined right where it sits — and that
+> number next to it isn't the model grading its own homework. It's the
+> actual probability the model assigned each word as it wrote it. Fluent
+> everywhere else, and then it dips exactly on the detail it made up. That's
+> the tell. And notice there's no number or name anywhere in this one — the
+> old check only ever looked for those. This is a different shape of
+> hallucination entirely, and it would have been invisible before today.
+
 ---
 
 ## Beat 3 — The credential · 2:40–3:15 · *35s*
@@ -556,7 +582,7 @@ Every item the brief lists, and where it appears.
 
 | Area | Beat | What we show |
 |---|---|---|
-| **Detection techniques** | 1, 4, 5 | Known-value matching against the company's own records; a pattern + checksum tier underneath (Luhn, Verhoeff, mod-97) as the floor; entity-provenance checking for made-up facts. No AI-as-judge on the fast path — it would be non-deterministic where we need determinism |
+| **Detection techniques** | 1, 4, 5, 2* | Known-value matching against the company's own records; a pattern + checksum tier underneath (Luhn, Verhoeff, mod-97) as the floor; entity-provenance checking for made-up facts; a pretrained toxicity classifier, imported not trained (D31, optional in beat 2). No AI-as-judge on the fast path — it would be non-deterministic where we need determinism |
 | **Decision logic** | 2, 3, 8 | Four tiers: allow, annotate, review, block. Confidence × severity × profile. Humans pulled in on the middle of the confidence range, and on routes where the law requires it |
 | **Architecture** | 1, 2, 3 | Pre-response gate on the irreversible checks; post-hoc on the reversible ones. Zero network calls on the decision path — policy is compiled ahead of time and read from memory |
 | **Governance** | 6, 7, 9 | Per-use-case policy profiles with content fingerprints, hot-swappable, with a readable diff; jurisdiction floors clamped on top of that, never looser; a hash-chained audit trail |
@@ -582,6 +608,55 @@ Every item the brief lists, and where it appears.
 | Multiple use cases at once | Three named profiles, shown in beat 7 |
 | Tens of thousands of interactions per week | ~30,000/week assumption stated in beat 0; traffic mix 60/30/10 in the seed data |
 | Mixed governance of internal data | 70/30 governed/ungoverned in the seed data, demonstrated in beat 5 |
+
+---
+
+## Anticipated question: "What about prompt injection?"
+
+Not a beat — nothing to click, because there is deliberately nothing built.
+This is Q&A material, for the moment someone asks why a governance gateway
+doesn't detect jailbreak attempts. Full reasoning in DRAWBACK.md D30; here is
+the spoken version, short enough to say in one breath:
+
+> We looked at that and decided against building it, for two separate
+> reasons.
+>
+> First, detecting that a user is trying to jailbreak the model is really
+> the model provider's job. They run their own safety training and
+> moderation on that exact model, with visibility into its failure modes we
+> don't have from outside. Us bolting on a second, cruder detector doesn't
+> add protection — it just adds false positives on top of a job someone else
+> already does better.
+>
+> Second — and this is the part that's actually about our architecture, not
+> a shrug — the one version of prompt injection that *would* be ours to
+> defend against is an attacker trying to talk the model into revealing the
+> real value behind a placeholder. And that attack has nothing to attack.
+> The model was never given the real value in the first place. You can't
+> talk a system into leaking a secret it was never handed.
+>
+> So instead of a detector that we'd calibrate blind and that a security
+> researcher could probably talk their way around anyway, we get a
+> structural answer: there's nothing there to extract.
+
+**If pressed further — "but what about indirect injection through agentic
+tool use?"**
+
+> Same answer, different reason. This system doesn't execute actions based
+> on what the model outputs — no tool-calling loop for a hijacked
+> instruction to hijack. The session-risk tracker you saw in beat 6 counts
+> agent steps as a budget signal, not as something it orchestrates. If we
+> ever add real tool execution, this becomes a live question again — today
+> it isn't one.
+
+**Why this is the better answer on stage, not just the honest one:** a thin
+keyword-matching injection filter is exactly the kind of shallow defense a
+security-literate judge breaks live with an encoded or translated prompt —
+and a detector that fails on stage is worse than no detector, because it
+*looked* like a solved problem right up until it wasn't. Arguing the
+structural reason instead is the same move as the bias panel in beat 10: we
+don't ship a weaker version of something someone else already does, we show
+why our own architecture makes the question answer itself.
 
 ---
 

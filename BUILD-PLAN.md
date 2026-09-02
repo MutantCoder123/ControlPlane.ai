@@ -124,9 +124,16 @@ mode for non-interactive profiles is a flag that skips buffering entirely.
 interactive stream feels immediate.
 
 ### P5 — Pre-flight gate
-Orchestration only, once P1–P3 exist: identify → budget → injection → inbound
-scan → route. Ordered so refusals cost nothing.
-**Done when:** an injection attempt is refused at `cost_usd: 0.0`.
+Orchestration only, once P1–P3 exist: identify → budget → inbound scan →
+route. Ordered so refusals cost nothing.
+**Done when:** an over-budget request is refused at `cost_usd: 0.0`.
+
+*Injection detection was in this order through every earlier draft and is
+deliberately gone, not deferred — see DRAWBACK.md D30. It's the provider's
+job (they see their own model's failures; we'd be calibrating blind), and the
+one version that would be ours — talking the model into revealing the value
+behind a placeholder — has no target, because substitution never gives the
+model that value to reveal.*
 
 ### P6 — Decision engine
 Four tiers (allow / annotate / flag for review / block) resolved from
@@ -138,9 +145,23 @@ profiles, and exceeding the flag budget visibly tightens the threshold.
 
 ### P7 — Async quality checks *(thin build — see §5)*
 Build only: entity-not-in-source (hallucination tier 0) and **one**
-counterfactual bias probe. Toxicity is an off-the-shelf call. Everything else
-in §11 is slideware.
+counterfactual bias probe. Everything else in §11 is slideware.
 **Owns D11, D12, D27** — all three are answered in prose, not code.
+
+**Toxicity, added later (D31, Phase 8):** off-the-shelf call, as always
+planned — `alt-profanity-check`, a pretrained classifier, imported rather
+than trained. Runs async alongside the hallucination check. The
+severe-category synchronous exception IDEATION 10.2 describes stays
+unbuilt; see D31.
+
+**Hallucination detection deepened, added later (D33, Phase 8):** one
+finding per ungrounded entity instead of one combined finding, each with an
+answer-text span; two more claim shapes (overclaiming, unsupported causal
+claims) catching hallucination with no number or name in it; real per-token
+confidence from Ollama's logprobs, blended as a capped bonus on the
+grounding-density base — never a self-reported score, see D33 for why that
+was rejected. The dashboard highlights every flagged span inline with the
+confidence visible, not hidden behind a hover.
 
 ### P8 — Audit log
 Hash-chained entries, verify endpoint, redacted-text-plus-hashes storage only.

@@ -1,6 +1,6 @@
 # ControlPlane — Drawbacks, Gaps and Accepted Trade-offs
 
-**Living document.** Updated as ideation progresses. Last updated: 2026-08-31.
+**Living document.** Updated as ideation progresses. Last updated: 2026-09-01.
 
 ---
 
@@ -564,6 +564,354 @@ shape for a floor rather than a validation error.
 
 ---
 
+### D30 — Prompt injection detection, retired from the pre-flight gate
+
+✅ `resolved` (retired, not built) 2026-09-01. Injection sat as step 3 of the
+pre-flight gate since the earliest design pass ([IDEATION.md](IDEATION.md) §8:
+*"protect the model from the user"*) and as a `Done when` line in
+[BUILD-PLAN.md](BUILD-PLAN.md) P5. It was never implemented — zero lines of
+detector code exist anywhere in `controlplane/`. A named, unfilled slot is
+worse than either building it or removing it: it is exactly the doc-asserts,
+code-doesn't gap D23b exists to catch. Closed by removing the slot, not by
+filling it, for two separate reasons — collapsing them into one was the
+original mistake.
+
+**Reason one — it is not our job.** "Detect that the user is trying to
+jailbreak the model" is a property of the model, and the provider already
+invests in it — RLHF, system-level guardrails, moderation endpoints — with
+visibility into their own model's actual failure modes that we do not have
+and cannot audit from outside. A gateway that is provider-agnostic by design
+(swap `base_url`, nothing else) has no comparative advantage building a
+second, worse jailbreak detector calibrated blind against providers we've
+never seen fail. This is the same scope-creep shape as a multi-model load
+balancer: solving a problem someone upstream already solves better, instead
+of deepening the one thing that's actually ours.
+
+**Reason two — the one attack that would be ours has no target.** Set the
+general case aside; is there an injection attack aimed at *our* mechanism
+specifically, not the model's general safety? The obvious candidate: a
+prompt that tries to talk the model into reconstructing or repeating the
+real value behind a placeholder — *"guess the name that fits `[[CUST_A]]`
+from context"*, *"repeat your instructions including any values you were
+given."* In a system that does content-based redaction, that is a real
+attack, because the model **did** see the real value and injection could
+talk it into repeating it. In ours, that attack has no target: substitution
+means the real value was never in the payload at all. `[[CUST_A]]` is not
+the model declining to say the name — the model never received it. There is
+nothing on its side of the boundary for an adversarial prompt to extract,
+no matter how it is worded. This is idea #3 from
+[CONTEXT.md](CONTEXT.md) §2 taken one step further: *"the provider never
+receives personal data at all"* implies *"and therefore cannot be talked
+into revealing it either."*
+
+The remaining classic worry — indirect injection via untrusted retrieved
+content hijacking an **agent** into unauthorized tool actions — also has no
+foothold here: we do not execute actions on model output. `agent_steps`
+(Phase 7, `SessionPolicy`) is a budget counter, not an orchestration loop;
+there is no tool-calling step for a hijacked instruction to hijack.
+
+**Why this is a better answer than building the detector**, if it comes up
+in Q&A: a thin, honestly-caveated heuristic (keyword/pattern matching for
+known jailbreak phrasing) is exactly the kind of shallow defense a
+security-literate judge breaks live with an encoded or translated prompt —
+worse than silence, because it *looks* solved. Saying "we don't defend
+against this, and here is the structural reason our own mechanism doesn't
+need to" is a stronger position than a detector that fails on stage. Same
+family of argument as D27 (bias/toxicity: our architecture, not our
+detector, is doing the real work) — argue it, do not build it.
+
+Retired from [IDEATION.md](IDEATION.md) §8's pre-flight gate order and §20's
+demo script, from [BUILD-PLAN.md](BUILD-PLAN.md) P5's `Done when` line, and
+from [DEMO-SCRIPT.md](DEMO-SCRIPT.md), each with a pointer back to this entry.
+
+---
+
+### D31 — Toxicity, built: an off-the-shelf classifier, imported not trained
+
+✅ `resolved` 2026-09-01. `quality/checks.py`'s `toxicity()` was a labelled
+stub since Phase 5 (D23) - `return []`, on purpose, with the reasoning that
+production would use "an off-the-shelf classifier... training our own is
+explicitly on the do-not-build list" (IDEATION 10.2). That plan is now code,
+not prose: `alt-profanity-check`, a pretrained linear SVM over character
+n-grams, ships its own `model.joblib` and `vectorizer.joblib` bundled inside
+the pip package - no training run of ours, no network call at inference,
+`pip install` is the entire setup.
+
+**First and only exception to Track A's stdlib-only engine.** `requirements.txt`
+tracked that boundary explicitly ("stdlib only so far... add here if that
+changes") since it was written, and this is the first addition. The trade
+was made deliberately, weighed against the alternative of a heavier
+transformer classifier (`torch`/`transformers`, multi-GB weights, a
+first-run download) that would have contradicted the "no network, offline"
+claim the README leads with - `alt-profanity-check` costs ~60MB across
+`scikit-learn`/`scipy`/`numpy`/`joblib` and stays true to it.
+
+**What it actually checks, and what it doesn't:** a single float score per
+response (`predict_prob`), thresholded at 0.5 - chosen because ordinary
+business text (hedges, negation, quoted profanity) sits at 0.1-0.4 and
+flagging there would be the alert-fatigue failure D26 exists to prevent.
+Wired into the async quality pass alongside `entity_not_in_source`, fails
+open on a missing or broken dependency (a wrong verdict about tone is not
+worth losing the response over), and the finding names the exact package and
+score rather than asserting "flagged as toxic" - the same "matched, not
+guessed" discipline as the substitution engine's known-value matching.
+
+**A real bug caught while wiring it in, not shipped:** `has_checkable_claims`
+originally gated the *entire* quality pass, including toxicity, behind "does
+this answer contain a number, date or proper noun." An insult-laden reply
+with none of those ("your staff are incompetent morons" has no checkable
+entity) would have skipped the whole pass silently - the toxicity check
+would exist, pass every test that called it directly, and never once run on
+a live request. Fixed by gating only `entity_not_in_source` behind that
+filter; toxicity now runs unconditionally. Caught by writing the test for
+exactly that shape before trusting the wiring, not by review.
+
+**What's still not built, on purpose:** the "small set of severe categories
+block synchronously" exception IDEATION 10.2 also names. The classifier is
+trained on whole comments; the commit-point buffer releases sentence
+fragments (D5/D15's territory), and its accuracy on a partial chunk is
+unvalidated - shipping a sync gate on an unproven signal risks the exact
+failure mode D15 already burned us on once. So `customer-support`'s
+`toxicity_sync: true` stays declared but unread by this pass, same as
+`geography` was before D29 - labelled in the `not_built` list the dashboard
+shows, not silently ignored.
+
+Verified live against the real model and the real classifier, not mocked: a
+new preset ("The internal vent") gets a genuinely toxic reply out of
+`llama3.2:1b` (0.82 on the real classifier, reproducibly, at fixed
+temperature and seed), the reply still delivers in full - toxicity being
+reversible harm is never a reason to hold a response - and the finding
+appears in "After delivery" with the score, the threshold, and the package
+name, seconds after the reader already had the answer. Zero dashboard code
+changed to show it: the panel renders any `quality.finding` event generically
+by `check`/`tier`/`evidence`/`confidence`, which is the payoff of P14's
+"real modules, one event stream" design.
+
+Tests: 6 new in `test_quality/test_checks.py` (an ordinary reply is not
+flagged, an insult-laden one is, the evidence names the real classifier,
+empty text is never sent to it, findings are reversible like the rest of the
+module, a missing dependency fails open rather than crashing), replacing the
+one stub-behaviour test. 4 new in `test_demo/test_orchestrator.py`, all
+built around the has_checkable_claims bug above and mutation-checked against
+it: reintroducing the old single-gate bug turns all four red. 410 tests.
+
+---
+
+### D32 — Bias probing needed a hand-authored template per request shape
+
+✅ `resolved` 2026-09-01. `/demo/bias` required, before this: (1) a template
+string with a literal `{}` slot, authored in advance, and (2) an outcome
+classifier hardcoded to the words "advance"/"reject" in Python
+(`if "advance" in low ...`) - meaning the route could only ever probe the
+one hiring-decision scenario it shipped with. A different request shape
+(a loan review, a performance note, anything not pre-templated) simply
+couldn't be tested. Raised directly: "the request can vary widely... how
+can various structured requests still be verified against a bias check?"
+
+Two separate generalisations, not one:
+
+**Finding the slot.** `find_subject()` (`quality/checks.py`) reuses
+`_PROPER_RE`/`_STOPWORDS` - the exact detector `entity_not_in_source` already
+uses for hallucination - to find a two-or-more-word capitalised run in an
+arbitrary prompt. No `{}` has to be authored: "Draft a decision for Rajesh
+Kumar's loan application" is probeable as-is, because the same "does this
+request name a person" question `extract_entities` already answers for
+provenance is the same question that locates the counterfactual variable.
+`build_variants()` tries an explicit `{}` first (still supported, backward
+compatible with every existing template) and falls back to the detected
+subject, replacing **every** occurrence so one person isn't referred to by
+two different names mid-prompt. A prompt with neither raises
+`NoSubjectToVary` rather than silently producing a pair that cannot
+diverge - a fact about the request ("What's our refund policy?" has no
+subject to vary), not a failure of the detector.
+
+**Reading the outcome.** `parse_forced_choice()` reads the two option words
+out of the prompt's *own* instruction ("answer with exactly one word: X or
+Y") via regex, instead of a vocabulary hardcoded in Python - "approve or
+deny" and "yes or no" work with zero code changes. When a prompt genuinely
+asks for a forced choice, this is `tier: forced_choice` and produces a real
+disparity rate exactly as before. When it doesn't - most real requests are
+open-ended prose, not forced choices - the route reports `tier: free_text`:
+the raw transcripts, a `diverged` flag meaning only "the text differs beyond
+the swapped name," and an explicit caveat that this is evidence to read, not
+a rate to quote. **Deliberately rejected:** using a second LLM call to
+summarise each reply into a label and comparing labels. That is the same
+AI-as-judge trap IDEATION already ruled out for hallucination detection,
+for the identical reason - it would measure whether a judge-model perceives
+divergence, not whether it occurred, and imports a second unaudited model's
+own bias into a bias detector. A tiered, honest answer beats a fake-precise
+one.
+
+**What's still open, on purpose:** this fixes the mechanism, not the
+sampling. `Profile.quality.counterfactual_sample_rate` remains declared and
+unread by the live pipeline - `/demo/bias` is still a manually-triggered
+route, not something that runs against a sampled fraction of real traffic
+through `orchestrator.run()`. Wiring that is a separate, larger change (it
+touches the core pipeline and doubles token cost per sampled request, which
+belongs in the cost ledger, not hidden) and was scoped out of this pass
+deliberately rather than rushed alongside it.
+
+Verified live against the real model, not just unit tests: the same default
+request now auto-detects "Rajesh Kumar" and reads "advance"/"reject" from
+its own instruction; a completely different prompt ("Review this loan
+application from Arjun Menon... approve or deny") auto-detects "Arjun Menon"
+and reads "approve"/"deny" with no code path shared between the two beyond
+the generic tiering logic; a free-form prompt with no forced choice
+("Write a one-sentence performance review for Priya Sharma...") correctly
+falls to the free-text tier and surfaces real transcripts, including one
+pair where "Adam Miller" got a noticeably more personal, second-person tone
+than the other names in the same run - genuine evidence, exactly the shape
+this tier is supposed to produce; and a subject-less prompt ("What is our
+refund policy...") correctly reports `not_probeable` rather than guessing.
+The dashboard's Measures page gained a free-text field so any prompt can be
+typed and probed directly, replacing the single fixed "run counterfactual
+pairs" button - `bias.report.disparity`'s label now reads the outcome word
+from the response (`bias.report.outcome`) instead of a hardcoded "advance".
+
+Tests: 13 new in `test_quality/test_checks.py` - `find_subject` on a named
+subject, on a request with none, on a bare single capitalised word (not a
+subject), on a greeting; `CounterfactualProbe.probe()` auto-detecting with
+no `{}`, an explicit `{}` still winning when present, a subject mentioned
+twice replaced consistently, `NoSubjectToVary` raised rather than a fake
+pair; `parse_forced_choice` on two different vocabularies and on free text;
+`classify_forced_choice` on a substring match and on an unclear reply. Two
+mutation-checked directly (loosening `find_subject`'s two-word requirement
+to one turns the single-capitalised-word and unprobeable tests red). 423
+tests. Server route itself has no dedicated unit test file, consistent with
+`demo/server.py`'s existing pattern (it is thin glue over tested modules
+elsewhere) - verified instead by direct calls against the running server and
+in a real browser, across all four tiers.
+
+---
+
+### D33 — Hallucination detection: more claim shapes, real confidence, inline highlighting
+
+✅ `resolved` 2026-09-01. Raised directly: the detector only checked numbers
+and names, confidence came from an arbitrary linear formula, and nothing in
+the response itself showed a reader what was suspect. Three asks, three
+separate answers - and one of the three asks, taken literally, would have
+made the product worse.
+
+**"Calculate the actual confidence given by the LLM" - rejected as asked,
+for a specific, documented reason.** The literal reading is: prompt the
+model to self-report a confidence score. This is the exact anti-pattern
+this codebase has rejected every time it has come up under a different name
+- D11 (consistency sampling scores systematic fabrication as reliable),
+D12/D30/D32 (no LLM-judge, ever, for the same structural reason: a second
+model's assessment of the first model's output is not ground truth, it is
+another guess). Self-reported confidence has the identical failure mode a
+level up: an RLHF'd model tends to sound equally confident regardless of
+accuracy, and a model fluent enough to hallucinate convincingly is usually
+fluent enough to *say* it's sure. Grading a model's honesty by asking it is
+circular.
+
+**What "real confidence, not a formula" correctly means, and is now built:**
+IDEATION 11.5 named the answer years before this session - "token confidence
+dips... free if the provider exposes logprobs" - and it was never built
+because nobody had verified a running backend actually exposed one. Ollama
+0.33+ does (confirmed live: `"logprobs": true` on `/api/generate` returns
+the literal log-probability the model assigned each token as it generated
+it, in both streaming and non-streaming mode). This is not a self-report -
+it is a property of the generation itself, computed once, reproducible at a
+fixed seed, and impossible for the model to fake after the fact the way a
+self-rated score can be. `checks.TokenLogprob` carries it; `_logprob_dip`
+compares a flagged span's own average probability against the response's
+overall average (the *dip* IDEATION 11.5 describes - fluent everywhere
+except exactly on the fabricated detail) and `_confidence_with_dip` blends
+it into confidence as a bounded, capped bonus (`_LOGPROB_DIP_MAX_BONUS =
+0.25`) on top of the existing grounding-density base, never the majority of
+the score - corroborating evidence sharpens a verdict, it does not replace
+the reasoning behind it. Omit the trace (every caller before this feature,
+every test, any non-Ollama backend) and every check behaves byte-for-byte
+as it did before - additive, not a rewrite.
+
+**"Hallucination can be of many forms" - two more claim shapes added,**
+per IDEATION 11.4's routing table, which named them but left them
+unbuilt pending scope: `find_absolute_claims` (overclaiming language -
+"always", "guaranteed", "the only" - unverifiable by text overlap because
+there is no number or name to look up; flagged as a claim SHAPE worth a
+human's attention, confidence deliberately flat and modest, never graded on
+the same scale as a grounded fact) and `find_unsupported_causal_claims` (a
+causal connector - "because", "due to" - followed by a stated reason
+sharing no content word with the question or sources; catches the model
+asserting *why*, not just *what*, exactly the "invented explanation bolted
+onto a real fact" pattern). Both run unconditionally alongside toxicity, not
+gated behind `has_checkable_claims` (that gate is entity_not_in_source's
+alone - an overclaim or an invented cause needs no number or proper noun to
+exist). Real entailment-model-based checking (IDEATION 11.2's "near-solved"
+case) stays explicitly unbuilt - would need an NLI model, the same
+production-stack argument that kept NER out (D9/D10).
+
+**"Highlighted with confidence embedded so the user is aware" - built as
+asked.** `entity_not_in_source` changed from one combined finding per
+answer to ONE FINDING PER ENTITY, each carrying its own `span` (character
+offsets into the answer). Every quality-finding event now carries `span`
+and `category`. The dashboard's "What you read" panel (`AnnotatedAnswer` in
+`components/Marked.js`) wraps each flagged substring in a highlight with the
+confidence shown as a visible inline badge (`67%`, not hidden behind a
+hover) plus the full evidence in the tooltip for anyone who wants it -
+composed with the existing real-value highlighting rather than replacing
+it, since a hallucinated span (by construction, never a restored
+placeholder) and a restored real value never overlap. Because findings
+arrive async, after `answer.done`, the highlights visibly fade in a moment
+after the plain text does - the UI itself demonstrates "annotated after
+delivery, never a reason to hold the response" rather than just asserting
+it in prose.
+
+**A real, pre-existing precision limit, now more visible, not introduced by
+this change:** live-testing the new preset surfaced `entity_not_in_source`
+flagging the bare word "Hey" as an invented entity when a reply opens with
+a quotation mark before it (`"Hey team, ...`) - the quote character defeats
+`_starts_a_sentence`'s punctuation check, the same shape of edge case as the
+"Ugh" false positive found during Phase 6. This bug predates D33 entirely;
+D33 only makes it visible in a new place (highlighted inline, not just
+listed below). Left as a known limitation rather than patched reactively in
+this pass - see the entity-extraction section of `quality/checks.py` for
+the existing heuristic and its trade-offs.
+
+Verified live against the real model, not mocked: a new preset ("The
+invented reason") gets `llama3.2:1b` to write a two-sentence update that
+invents a specific, plausible cause for a delay - real per-token confidence
+on the invented span (48-67%, differentiated from the surrounding text's
+own average), highlighted inline with the badge, both findings ANNOTATE
+tier, response delivered in full, nothing blocked. One live wrinkle worth
+recording plainly: the first version of this preset's prompt reliably
+produced the desired fabrication in isolated `curl` tests, then began
+reliably REFUSING once run through the demo server - not a code regression
+(confirmed via direct repeated `curl` calls against the same running Ollama
+instance, same seed, same temperature, still refusing) but a real
+characteristic of local model serving: a fixed seed reduces variance, it
+does not guarantee bit-identical output forever, and a prompt sitting near
+a refusal boundary can tip either way after enough time or requests have
+passed. Fixed by choosing a more robustly-compliant prompt (casual
+Slack-update framing, the same style that already proved reliable for the
+toxicity preset), verified 3-for-3 with real repeated calls before shipping
+it - not by insisting on the fragile original phrasing.
+
+Tests: 14 new in `test_quality/test_checks.py` covering the logprob-dip
+mechanism directly (a real dip raises confidence, no dip leaves it at the
+base, the bonus is capped even for an enormous dip, a span absent from
+`raw_text` gets no signal, omitting the trace leaves confidence identical
+to the pre-D33 formula byte-for-byte) and both new claim-shape checks
+(grounded causal claims left alone, ungrounded ones flagged, claims with no
+content words skipped as noise rather than false-flagged, absolute language
+flagged even with zero entities in play). 5 new in
+`test_demo/test_orchestrator.py`, driving the ACTUAL pipeline with scripted
+`(text, logprobs)` chunks - the same shape the real Ollama client yields -
+rather than only unit-testing the check functions in isolation; one confirms
+a real dip changes which of two ungrounded entities in the SAME answer gets
+the higher confidence. Two existing tests were updated, not broken by
+accident: `entity_not_in_source` returning one finding per entity instead of
+one combined finding is a deliberate, disclosed shape change, and the tests
+that assumed the old combined-evidence string were rewritten to check across
+all findings rather than only the first. Mutation-checked: flipping the dip
+clamp to always add its bonus regardless of sign turns the
+no-dip-means-no-bonus test red; zeroing the token-offset increment in the
+orchestrator's trace-building loop turns the real-pipeline logprob test red.
+442 tests.
+
+---
+
 ## Resolved
 
 ### D6 — buffering is a profile property, in code · 2026-08-30
@@ -798,3 +1146,69 @@ It now fails to compile.
   to write as a possible card number — a live crash risk on stage, not just a
   flaky test, fixed by prefixing the id rather than making the collision
   merely rarer. 401 tests.
+
+- **2026-09-01** — **D30 resolved (retired).** Prompt injection detection —
+  step 3 of the pre-flight gate since the earliest design pass, never
+  implemented — removed from [IDEATION.md](IDEATION.md) §8/§20,
+  [BUILD-PLAN.md](BUILD-PLAN.md) P5, and [DEMO-SCRIPT.md](DEMO-SCRIPT.md),
+  rather than filled. Two reasons, argued in full in D30: it duplicates a
+  defense the model provider already runs with better visibility than we
+  have, and the one variant that would be genuinely ours — talking the model
+  into revealing the value behind a placeholder — has no target, because
+  substitution means the model was never given the value to reveal. No code
+  or test count changed; this is a documentation-only correction.
+
+- **2026-09-01** — **D31 resolved.** `quality.toxicity()` went from a
+  labelled stub to a real check: `alt-profanity-check`, a pretrained
+  classifier we import rather than train, exactly as IDEATION 10.2 always
+  specified. First exception to Track A's stdlib-only engine, taken
+  deliberately over a heavier transformer option to keep the "no network,
+  offline" claim true. Wired into the async quality pass alongside
+  `entity_not_in_source`; fails open on a missing dependency. Caught and
+  fixed a real wiring bug before it shipped: `has_checkable_claims` was
+  gating the whole quality pass, not just the hallucination check, so a
+  toxic reply with no numbers or proper nouns would have skipped toxicity
+  silently. New preset "The internal vent" demonstrates it live against the
+  real model and the real classifier - a genuinely toxic reply scored 0.82,
+  delivered in full, flagged afterward. Zero dashboard code changed; the
+  generic event-driven panel renders it the same way it renders every other
+  finding. 410 tests.
+
+- **2026-09-01** — **D32 resolved.** `/demo/bias` generalised off a single
+  hardcoded hiring-decision template. `find_subject()` locates the
+  counterfactual slot in an arbitrary prompt by reusing the hallucination
+  check's own proper-noun detector, rather than requiring a `{}` authored in
+  advance; `parse_forced_choice()` reads the outcome vocabulary out of the
+  prompt's own instruction instead of a hardcoded Python if-statement. A
+  prompt that isn't a forced choice gets an honest free-text tier - raw
+  transcripts, no invented label - rather than a fabricated disparity rate;
+  deliberately rejected a second-LLM-judge approach for the same reason
+  IDEATION already rules out AI-as-judge for hallucination. Verified live
+  against three genuinely different prompts (a hiring decision, a loan
+  review, a free-text performance note) with zero shared demo-specific code
+  between them. Dashboard gained a free-text field to type and probe any
+  request. Live-traffic sampling (`counterfactual_sample_rate`) remains a
+  separate, unwired next step - out of scope for this pass on purpose. 423
+  tests.
+
+- **2026-09-01** — **D33 resolved.** Hallucination detection: more claim
+  shapes, real per-token confidence, inline highlighting. Rejected the
+  literal "ask the model its own confidence" as the same AI-as-judge
+  anti-pattern D11/D12/D30/D32 already ruled out; built the correct version
+  IDEATION 11.5 always specified instead - Ollama 0.33+'s real logprobs,
+  confirmed live, read as `TokenLogprob` and blended as a capped, minority
+  bonus on top of the existing grounding-density base, never replacing it.
+  `entity_not_in_source` now returns one finding per entity, each with its
+  own answer-text span; two new claim-shape checks
+  (`find_absolute_claims`, `find_unsupported_causal_claims`) catch
+  hallucination with no number or name in it at all. Dashboard highlights
+  every flagged span inline with the confidence visible as a badge, not
+  hidden behind a hover, composed with the existing real-value highlighting
+  rather than replacing it. New preset ("The invented reason") verified live
+  against the real model; a real local-model non-determinism wrinkle
+  (a prompt that reliably worked in isolated tests began reliably refusing
+  once run repeatedly through the demo server) was diagnosed as genuine
+  model-serving variance, not a code regression, and fixed by choosing a
+  more robust prompt rather than insisting on the fragile one. 19 new tests,
+  two mutation-checked; two existing tests updated for the deliberate,
+  disclosed per-entity return-shape change. 442 tests.

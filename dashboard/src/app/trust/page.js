@@ -17,6 +17,7 @@ export default function Measures() {
   const [cost, setCost] = useState(null);
   const [quality, setQuality] = useState(null);
   const [bias, setBias] = useState(null);
+  const [biasPrompt, setBiasPrompt] = useState('');
   const [busy, setBusy] = useState(null);
   const [err, setErr] = useState(null);
 
@@ -153,10 +154,6 @@ export default function Measures() {
       <section className="panel" style={{ marginBottom: 16 }}>
         <div className="panel-head">
           <span className="panel-title">Bias · aggregate, because there is no other kind</span>
-          <button className="btn" disabled={busy === 'bias'}
-            onClick={() => run('bias', () => post('/demo/bias', {}), setBias)}>
-            {busy === 'bias' ? 'Probing…' : 'Run counterfactual pairs'}
-          </button>
         </div>
         <div className="panel-body">
           <div className="note" data-kind="cold" style={{ marginBottom: 12 }}>
@@ -166,15 +163,50 @@ export default function Measures() {
             toxicity detection and mislabelling it.
           </div>
 
-          {!bias ? (
-            <p className="payload-empty">
-              Runs the same request twice with one attribute changed, then counts outcomes. We vary
-              the attribute rather than masking it: masking is fairness through unawareness — the
-              model reconstructs it from everything else, so it removes our ability to measure bias
-              without removing the bias.
-            </p>
+          <p className="payload-empty" style={{ marginBottom: 10 }}>
+            Runs the same request twice with one attribute changed, then counts outcomes. We vary
+            the attribute rather than masking it: masking is fairness through unawareness — the
+            model reconstructs it from everything else, so it removes our ability to measure bias
+            without removing the bias. Paste <b>any</b> request that names a person — no template
+            required, no <span className="mono">{'{}'}</span> slot to author. The subject is found
+            automatically, and if the request itself asks for a forced choice ("answer with exactly
+            one word: X or Y"), that vocabulary is read out of the request too, not hardcoded here.
+          </p>
+
+          <div className="composer" style={{ marginBottom: 8 }}>
+            <textarea
+              style={{ minHeight: 70 }}
+              placeholder="Leave empty to run the default example, or paste any request that names a person…"
+              value={biasPrompt}
+              onChange={(e) => setBiasPrompt(e.target.value)}
+            />
+          </div>
+          <button className="btn" disabled={busy === 'bias'} style={{ marginBottom: 12 }}
+            onClick={() => run(
+              'bias',
+              () => post('/demo/bias', biasPrompt.trim() ? { prompt: biasPrompt.trim() } : {}),
+              setBias,
+            )}>
+            {busy === 'bias' ? 'Probing…' : 'Probe this request'}
+          </button>
+
+          {!bias ? null : bias.tier === 'not_probeable' ? (
+            <div className="note" data-kind="cold">
+              <b>Nothing to vary in this request.</b> {bias.honest_caveat} That's a fact about the
+              request — no subject means no counterfactual axis, not a failure of the probe.
+            </div>
           ) : (
             <>
+              {bias.subject && (
+                <div className="note" style={{ marginBottom: 10 }}>
+                  <b>Subject found:</b> <span className="chip mono">{bias.subject}</span>
+                  {bias.options && <>
+                    {' '}&nbsp;<b>Forced choice read from the request:</b>{' '}
+                    <span className="chip mono">{bias.options.join(' / ')}</span>
+                  </>}
+                </div>
+              )}
+
               <table className="grid" style={{ marginBottom: 12 }}>
                 <thead><tr><th>Attribute changed</th><th>Outcome A</th><th>Outcome B</th><th>Diverged</th></tr></thead>
                 <tbody>
@@ -190,23 +222,35 @@ export default function Measures() {
                   ))}
                 </tbody>
               </table>
-              <div className="cols cols-2" style={{ marginBottom: 12 }}>
-                <div className="stat" data-tone="warm">
-                  <span className="v">
-                    {bias.pairs.filter((p) => p.diverged).length} / {bias.pairs.length}
-                  </span>
-                  <span className="k">
-                    pairs where changing only the name changed the outcome
-                  </span>
+
+              {bias.tier === 'free_text' ? (
+                <div className="note" data-kind="cold" style={{ marginBottom: 12 }}>
+                  <b>Free-text tier.</b> This request didn't ask for a forced choice, so there is no
+                  outcome vocabulary to classify against and no disparity rate to show. "Diverged"
+                  here just means the reply text differs beyond the swapped name — read it as raw
+                  evidence, not a bias signal: models paraphrase even semantically identical answers,
+                  so some divergence here is expected and not itself proof of anything.
                 </div>
-                <div className="stat" data-tone="cold">
-                  <span className="v">{bias.report.disparity}</span>
-                  <span className="k">
-                    widest gap in “advance” rate between any two groups — 0 here because
-                    nothing advanced, which is a fact about this run, not a clean bill of health
-                  </span>
+              ) : (
+                <div className="cols cols-2" style={{ marginBottom: 12 }}>
+                  <div className="stat" data-tone="warm">
+                    <span className="v">
+                      {bias.pairs.filter((p) => p.diverged).length} / {bias.pairs.length}
+                    </span>
+                    <span className="k">
+                      pairs where changing only the name changed the outcome
+                    </span>
+                  </div>
+                  <div className="stat" data-tone="cold">
+                    <span className="v">{bias.report.disparity}</span>
+                    <span className="k">
+                      widest gap in “{bias.report.outcome}” rate between any two groups — 0 here
+                      would mean nothing diverged, which is a fact about this run, not a clean bill
+                      of health
+                    </span>
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="note"><b>Sample size:</b> {bias.honest_caveat}</div>
             </>
           )}

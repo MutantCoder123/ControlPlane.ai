@@ -5,9 +5,11 @@ session, a new model, or a teammate joining mid-stream. Everything below is
 *state*: what exists, what it does, what is decided, and what is left. The
 reasoning lives in the linked documents; this file is the map.
 
-Last updated: 2026-08-31 · **401 tests green** on Track A alone, ~430 with
-Track B merged. Phase 6 (the dashboard) and Phase 7 (session risk +
-jurisdiction floors) are both built.
+Last updated: 2026-09-01 · **442 tests green** on Track A alone, ~470 with
+Track B merged. Phase 6 (the dashboard), Phase 7 (session risk + jurisdiction
+floors) and Phase 8 (a real toxicity classifier, D31; dynamic bias probing,
+D32; deeper hallucination detection with real per-token confidence, D33)
+are all built.
 
 ---
 
@@ -48,7 +50,7 @@ Full reasoning: [IDEATION.md](IDEATION.md) §3, §6, §9.2–§9.4.
 
 Python 3.13 · FastAPI at the edge · **stdlib-only engine** · pytest.
 
-### Track A — `controlplane/` (complete through Phase 7)
+### Track A — `controlplane/` (complete through Phase 8)
 
 | Package | What it does | Part |
 |---|---|---|
@@ -60,7 +62,7 @@ Python 3.13 · FastAPI at the edge · **stdlib-only engine** · pytest.
 | `metrics/` | Seeded canaries, Wilson-interval FN estimation, metric registry | P10 |
 | `cost/` | Gross / overhead / net ledger — the flattering number cannot be read alone | P11 |
 | `stream/` | Commit-point buffer: sentence / 40 tokens / 250 ms, with overlap window | P4 |
-| `quality/` | Async post-hoc checks (thin by design) | P7 |
+| `quality/` | Async post-hoc checks (thin by design); toxicity is a real, pretrained classifier now (Phase 8, D31), the only exception to Track A's stdlib-only rule; the bias probe finds its subject and its outcome vocabulary in an arbitrary prompt, not a hardcoded template (Phase 8, D32); hallucination now covers overclaiming and unsupported-causal-claim shapes too, confidence sharpened by Ollama's real per-token log-probability rather than a self-report, spans highlighted inline on the dashboard (Phase 8, D33) | P7 |
 | `demo/` | Instrumented pipeline: one typed event per stage, so the dashboard renders what the modules returned rather than recomputing it | P14 |
 
 ### The dashboard — `dashboard/` (Next.js)
@@ -167,13 +169,15 @@ decision to *fix* or *answer*. The ones that shape everything:
 | 5. Stream & Quality | P4, P7 | ✅ |
 | 6. Surface & Delivery | P12 dashboard | ✅ |
 | 7. Brief alignment | Session risk + jurisdiction floors (D4, D29) | ✅ |
+| 8. Toxicity, bias probing, hallucination depth | A pretrained toxicity classifier (D31); the bias probe finds its subject and vocabulary in any prompt (D32); two more hallucination claim shapes plus real per-token confidence and inline highlighting (D33) | ✅ |
 | **6. Surface & Delivery** | **P14 demo cut** | **in progress — the only work left** |
 
 P5 (pre-flight gate) is orchestration over Track B's gateway and lands with
-integration rather than as a phase of its own. Phase 7 sits ahead of P14 in
-this table because it landed after Phase 6 but closes gaps the brief names
-directly, rather than being part of the surface/delivery work P14 covers -
-see [PHASE-7-PLAN.md](PHASE-7-PLAN.md).
+integration rather than as a phase of its own. Phases 7 and 8 sit ahead of
+P14 in this table because they landed after Phase 6 but close gaps the brief
+names directly (or, for Phase 8, a gap D23 had already labelled), rather than
+being part of the surface/delivery work P14 covers - see
+[PHASE-7-PLAN.md](PHASE-7-PLAN.md) and DRAWBACK.md D31.
 
 ---
 

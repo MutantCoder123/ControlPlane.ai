@@ -84,6 +84,57 @@ export function Spanned({ text, findings }) {
   return <>{out}</>;
 }
 
+/** The delivered answer, with hallucination/overclaim findings (D33)
+ * highlighted exactly where they sit - confidence shown inline as a small
+ * badge, not hidden behind a hover, plus the full evidence in the tooltip
+ * for anyone who wants it.
+ *
+ * Composes with `Marked`'s real-value highlighting rather than replacing
+ * it: a quality finding flags text the model actually typed, which by
+ * construction is never a restored placeholder value (a hallucinated
+ * entity has no substitution mapping - nothing to restore), so the two
+ * kinds of span never overlap. This walks the quality findings first, then
+ * re-applies `Marked` to whatever plain text falls between them, so real
+ * values still warm-flash exactly as they did before this feature existed.
+ *
+ * Findings without a `span` (toxicity describes the whole reply, not one
+ * substring) are simply skipped here - they still show up in the findings
+ * list below, this only handles the ones with something to underline.
+ */
+export function AnnotatedAnswer({ text, findings, realValueNeedles, fresh }) {
+  if (!text) return null;
+  const spanned = (findings ?? []).filter((f) => f.span);
+  const plain = (slice, key) => (
+    <Marked key={key} text={slice} needles={realValueNeedles}
+            className="tok-real" fresh title="restored on the way out" />
+  );
+  if (!spanned.length) return plain(text, 'all');
+
+  const ordered = [...spanned].sort((a, b) => a.span[0] - b.span[0]);
+  const out = [];
+  let at = 0;
+
+  ordered.forEach((f, i) => {
+    const [start, end] = f.span;
+    if (start < at) return; // overlapping with an earlier finding - keep that one
+    if (start > at) out.push(plain(text.slice(at, start), `gap-${i}`));
+    out.push(
+      <mark
+        key={i}
+        className={`halluc-mark cat-${f.category}`}
+        title={`${f.check} · ${f.evidence} · confidence ${f.confidence.toFixed(2)}`}
+      >
+        {text.slice(start, end)}
+        <sup className="halluc-badge">{Math.round(f.confidence * 100)}%</sup>
+      </mark>,
+    );
+    at = end;
+  });
+
+  if (at < text.length) out.push(plain(text.slice(at), 'tail'));
+  return <>{out}</>;
+}
+
 /** Raw model output: placeholders cold, the not-yet-released tail amber.
  *
  * `heldChars` comes from the buffer itself (`pending_chars + held_chars`), so
