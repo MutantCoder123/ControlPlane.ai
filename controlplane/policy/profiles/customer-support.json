@@ -3,7 +3,7 @@
   "description": "Family A. Output reaches the public, so the catastrophic direction is outbound: customer X shown customer Y's record (D21).",
   "outbound": {
     "scan_pii": true,
-    "cross_tenant_check": true
+    "cross_record_check": true
   },
   "quality": {
     "hallucination_tier": 2,

@@ -171,6 +171,46 @@ for the gateway to concatenate the parts and scan once. That would make every
 so it would have worked around a gap in the contract by silently violating a
 different part of it.
 
+### ScanOptions — amendment, 2026-09-02
+
+**Both scan methods take an optional keyword-only `options`.** Three profile
+settings change what the engine does — `inbound.known_value_matching`,
+`inbound.substitute_pii`, `outbound.scan_pii` — and until now none of them were
+read by anything. They were displayed on the dashboard as if they worked.
+
+```python
+def scan_inbound(self, text, scope=None, *, options: ScanOptions | None = None) -> ScanResult
+def scan_outbound(self, text, *, options: ScanOptions | None = None) -> ScanResult
+
+@dataclass(frozen=True)
+class ScanOptions:
+    known_value_matching: bool = True   # inbound: use the record store
+    substitute_pii: bool = True         # inbound: placeholder PII
+    scan_pii: bool = True               # outbound: scan the response for PII
+```
+
+**Nothing Track B has written needs to change.** The argument is keyword-only
+and defaulted, and every default reproduces the previous behaviour exactly —
+`scan_inbound(text, scope)` and `scan_inbound(text, scope, options=ScanOptions())`
+produce identical output, which `test_scan_options.py` asserts directly rather
+than assuming.
+
+**The engine still does not know what a `Profile` is.** `engine/` importing
+`policy/` would invert the layering that `EngineConfig`'s docstring has stated
+since Portion 1. The caller maps profile → options via `policy/adapters.py`;
+the engine reads three booleans and never learns where they came from.
+
+**Two guarantees hold no matter what is passed:**
+
+1. **A credential blocks under every combination.** `substitute_pii=False` is a
+   PII decision and may never become a credential decision; `action == "block"`
+   candidates are handled before either switch is consulted. Two tests cover
+   this, and both go red if the branch is bypassed.
+2. **Turning substitution off does not turn reporting off.** The value is not
+   placeholdered, but the finding still reaches the audit line and the metrics,
+   marked `observed` rather than `substitute` — recording that we substituted
+   something we actually sent would be a lie in the audit record.
+
 ### Rules that are not negotiable
 
 1. **`mapping` never leaves the request.** It is created per request, passed

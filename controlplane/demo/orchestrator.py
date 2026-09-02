@@ -32,11 +32,12 @@ from pathlib import Path
 import httpx
 
 from controlplane.audit.chain import AuditLog, record_scan, text_fingerprint
-from controlplane.cost.ledger import CostLedger
+from controlplane.cost.ledger import BudgetExceeded, CostLedger
 from controlplane.cost.pricing import Usage, estimate_tokens
 from controlplane.decision.tiers import (
     DecisionEngine,
     FlagBudget,
+    Signal,
     signals_from_findings,
 )
 from controlplane.demo import events as ev
@@ -45,6 +46,7 @@ from controlplane.engine.substitute import SubstitutionEngine
 from controlplane.feedback.loop import FeedbackAggregator, ReviewQueue
 from controlplane.feedback.session import SessionRiskTracker
 from controlplane.metrics.registry import MetricsRegistry
+from controlplane.policy.adapters import inbound_options, outbound_options
 from controlplane.policy.store import ControlPlane
 from controlplane.quality import checks
 from controlplane.stream.buffer import CommitPointBuffer
@@ -105,6 +107,7 @@ class DemoRuntime:
         team: str = "support",
         session_id: str | None = None,
         agent_steps: int = 0,
+        sources: str = "",
     ):
         """One request, narrated. Yields dicts from `events.EventStream`."""
         stream = ev.EventStream()
@@ -145,7 +148,12 @@ class DemoRuntime:
         # -- 1. inbound scan ----------------------------------------------
         scope = self.engine.new_request_scope()
         t0 = time.perf_counter()
-        scanned = self.engine.scan_inbound(prompt, scope=scope)
+        # The profile now reaches the engine (phase 2.1). It arrives as
+        # `ScanOptions` rather than as a `Profile`, so `engine/` still knows
+        # nothing about `policy/` - see policy/adapters.py.
+        scanned = self.engine.scan_inbound(
+            prompt, scope=scope, options=inbound_options(profile)
+        )
         scan_ms = round((time.perf_counter() - t0) * 1000, 2)
 
         yield stream.emit(
@@ -175,6 +183,13 @@ class DemoRuntime:
             findings=scanned.findings,
             prompt_fingerprint=text_fingerprint(prompt),
             blocked=decision.blocked or scanned.blocked,
+            # phase 2.4: the profile's audit_level finally decides how much
+            # decision detail the entry carries. More about the decision,
+            # never more about the content.
+            level=profile.audit_level,
+            profile_fingerprint=profile.fingerprint,
+            decision_tier=decision.tier.label,
+            decision_reasons=[o.reason for o in decision.outcomes],
         )
         # Nested, not splatted: the entry has its own `seq` and it would
         # shadow the event's, which is the kind of silent collision a
@@ -234,6 +249,37 @@ class DemoRuntime:
             yield stream.emit(ev.DONE, outcome="blocked")
             return
 
+        # -- 3b. the budget gate, still before dispatch --------------------
+        # `CostLedger.check_budget` existed and was tested from Phase 4, and
+        # nothing on the live path ever called it (EXPLAINED 8.2). This is the
+        # budget step of IDEATION section 8's pre-flight gate, finally wired.
+        #
+        # It sits HERE, before dispatch, for the same reason the credential
+        # refusal does: you are billed the moment the model starts generating,
+        # so a check that runs after dispatch has already paid for the request
+        # it is about to refuse. Refusing here costs 0.00, and the event says so.
+        estimate = self.ledger.estimate(
+            PRICED_AS, scanned.text, profile.cost.max_output_tokens
+        )
+        try:
+            self.ledger.check_budget(
+                team=team,
+                estimate=estimate,
+                request_budget_usd=profile.cost.request_budget_usd,
+            )
+        except BudgetExceeded as exc:
+            yield stream.emit(
+                ev.BLOCK,
+                where="budget",
+                reason=str(exc),
+                redacted=scanned.text,
+                categories=[],
+                estimate_usd=round(estimate, 6),
+                cost_usd=0.0,
+            )
+            yield stream.emit(ev.DONE, outcome="blocked_budget")
+            return
+
         # -- 4. leak check, then dispatch ---------------------------------
         leaked = [v for v in scanned.mapping.values() if v and v in scanned.text]
         yield stream.emit(
@@ -250,9 +296,10 @@ class DemoRuntime:
         )
 
         # -- 5. stream, buffered by the REAL commit-point buffer ----------
+        out_opts = outbound_options(profile)
         buffer = CommitPointBuffer(
             profile,
-            self.engine.scan_outbound,
+            lambda text: self.engine.scan_outbound(text, options=out_opts),
             restore=self.engine.restore,
             mapping=scanned.mapping,
         )
@@ -272,7 +319,9 @@ class DemoRuntime:
         logprob_trace: list[checks.TokenLogprob] = []
 
         try:
-            async for chunk in _ollama_chunks(scanned.text):
+            async for chunk in _ollama_chunks(
+                scanned.text, max_output_tokens=profile.cost.max_output_tokens
+            ):
                 if isinstance(chunk, tuple):
                     text, token_logprobs = chunk
                 else:
@@ -392,6 +441,67 @@ class DemoRuntime:
             released_chars=buffer.stats.released_chars,
         )
 
+        # -- 6b. cross-record disclosure (phase 2.2) ------------------------
+        # D21's failure mode, made checkable: in a customer-facing bot the
+        # catastrophic direction is outbound - customer X shown customer Y's
+        # record. The comparison needs no new detection machinery, only the
+        # two sets of record references we already have.
+        #
+        # Scanning the RESTORED answer is the point. A value we substituted
+        # comes back carrying a reference that was in the request; a record
+        # the model produced on its own was never a placeholder, so it
+        # survives restore as literal text and the known-value store
+        # recognises it. Anything in the second set but not the first crossed
+        # a record boundary.
+        if profile.outbound.cross_record_check and answer:
+            inbound_refs = {f.record_ref for f in scanned.findings if f.record_ref}
+            out_scan = self.engine.scan_outbound(answer, options=out_opts)
+            crossed = sorted(
+                {f.record_ref for f in out_scan.findings if f.record_ref} - inbound_refs
+            )
+            if crossed:
+                # Irreversible: this is a disclosure, not an annotation. The
+                # reader has been shown a record they did not ask about, and
+                # no amount of after-the-fact marking un-shows it.
+                #
+                # Confidence is 1.0 because a known-value match is certain -
+                # the store matched exactly - which means this clears every
+                # profile's block_at and blocks on any route that runs it.
+                # That is the correct outcome, not a missing nuance: the
+                # profile's decision here is whether to run the check at all,
+                # and softening a certain signal to produce a gentler tier
+                # would be trading real protection for a talking point.
+                signal = Signal(
+                    category="cross_record",
+                    kind="outbound",
+                    confidence=1.0,
+                    reversible=False,
+                    evidence=(
+                        f"the response references {len(crossed)} record(s) that were "
+                        f"not in the request: {', '.join(crossed)}"
+                    ),
+                )
+                outcome = self.decisions.decide([signal], profile)
+                yield stream.emit(
+                    ev.CROSS_RECORD,
+                    side="inside",
+                    crossed=crossed,
+                    in_request=sorted(inbound_refs),
+                    tier=outcome.tier.label,
+                    evidence=signal.evidence,
+                    reversible=False,
+                )
+                self.metrics.record_decision(outcome)
+                if outcome.needs_human:
+                    for item in self.queue.enqueue_decision(outcome, request_id=request_id):
+                        yield stream.emit(
+                            "queue.enqueue",
+                            item_id=item.item_id,
+                            category=item.category,
+                            confidence=item.confidence,
+                            reason=item.reason,
+                        )
+
         # -- 7. cost -------------------------------------------------------
         usage = Usage(
             model=PRICED_AS,
@@ -423,7 +533,7 @@ class DemoRuntime:
         # these events is the proof: the reader already had their answer.
         async for event in self._quality_pass(
             stream, answer, prompt, profile, request_id,
-            raw_text=raw_text, logprob_trace=logprob_trace,
+            raw_text=raw_text, logprob_trace=logprob_trace, sources=sources,
         ):
             yield event
 
@@ -434,6 +544,7 @@ class DemoRuntime:
     async def _quality_pass(
         self, stream, answer, prompt, profile, request_id,
         *, raw_text: str = "", logprob_trace: list[checks.TokenLogprob] | None = None,
+        sources: str = "",
     ):
         """Hallucination (three claim shapes now) and toxicity; bias
         structurally elsewhere.
@@ -471,7 +582,7 @@ class DemoRuntime:
             findings += [
                 (f, "hallucination")
                 for f in checks.entity_not_in_source(
-                    answer, prompt, sources="",
+                    answer, prompt, sources,
                     logprob_trace=logprob_trace, raw_text=raw_text,
                 )
             ]
@@ -486,7 +597,7 @@ class DemoRuntime:
         findings += [
             (f, "hallucination")
             for f in checks.find_unsupported_causal_claims(
-                answer, prompt, sources="",
+                answer, prompt, sources,
                 logprob_trace=logprob_trace, raw_text=raw_text,
             )
         ]
@@ -540,6 +651,13 @@ class DemoRuntime:
             ev.QUALITY_DONE,
             ran=ran,
             skipped=skipped,
+            # phase 2.5: `sources` was hardcoded empty, so an answer was only
+            # ever judged against the question. A correct-but-new fact was
+            # indistinguishable from an invented one - the largest single
+            # source of false positives in this check. Reported so the reader
+            # knows which of the two comparisons they are looking at.
+            grounded_against=("question + sources" if sources else "question only"),
+            sources_chars=len(sources or ""),
             not_built={
                 "toxicity_sync_exception": "D31 - the 'small set of severe "
                                            "categories block synchronously' "
@@ -561,7 +679,7 @@ def _count_restored(text: str, mapping: dict[str, str]) -> int:
     return sum(1 for value in mapping.values() if value and value in text)
 
 
-async def _ollama_chunks(prompt: str):
+async def _ollama_chunks(prompt: str, *, max_output_tokens: int | None = None):
     """Raw token chunks from the local model, paired with the REAL
     log-probability the model assigned each one as it generated it.
 
@@ -587,7 +705,15 @@ async def _ollama_chunks(prompt: str):
         "model": OLLAMA_MODEL,
         "prompt": prompt,
         "stream": True,
-        "options": {"temperature": 0.2, "seed": 20260830},
+        # `num_predict` is Ollama's generation cap, verified to stop at
+        # exactly the limit with done_reason "length". This is the profile's
+        # `cost.max_output_tokens` finally doing something (phase 2.3) - a
+        # ceiling declared in policy and previously read by nobody.
+        "options": {
+            "temperature": 0.2,
+            "seed": 20260830,
+            **({"num_predict": max_output_tokens} if max_output_tokens else {}),
+        },
         "logprobs": True,
     }
     async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=5.0)) as client:

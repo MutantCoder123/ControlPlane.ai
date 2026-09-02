@@ -71,6 +71,11 @@ class RunRequest(BaseModel):
     #: on why we do not generate our own session ids.
     session_id: str | None = None
     agent_steps: int = 0
+    #: Reference material the answer is allowed to draw on - a retrieved
+    #: document, a policy extract, a case file. Without it the hallucination
+    #: check can only compare the answer against the question, so anything
+    #: correct but new reads as invented (phase 2.5).
+    sources: str = ""
 
 
 @app.post("/demo/run")
@@ -83,6 +88,7 @@ async def run(req: RunRequest):
                 team=req.team,
                 session_id=req.session_id,
                 agent_steps=req.agent_steps,
+                sources=req.sources,
             ):
                 yield ev.EventStream.sse(event)
         except Exception as exc:                      # noqa: BLE001 - demo surface
@@ -239,6 +245,25 @@ PRESETS = [
                  "declares toxicity_sync in its policy, but the check still "
                  "ran async - that flag isn't wired to anything yet (D31), "
                  "and the honest gap is right there in the not_built list.",
+    },
+    {
+        "id": "grounded",
+        "title": "Judged against the document",
+        "proves": "The same answer, with and without the source it should have used",
+        "profile": "internal-knowledge",
+        "prompt": "What is our refund window, and what happens after it closes?",
+        "sources": (
+            "Refund policy, section 4. Customers may request a full refund "
+            "within 30 days of purchase. After 30 days, requests are handled "
+            "as store credit at the discretion of the support lead."
+        ),
+        "watch": "Run it once as-is: the answer is judged against the QUESTION "
+                 "only, so '30 days' and 'store credit' look invented - they "
+                 "appear nowhere in what was asked. Now clear the reference "
+                 "box and run again, or paste the policy back in. Same answer, "
+                 "different verdict. Until phase 2.5 `sources` was hardcoded "
+                 "empty, so every correct-but-new fact read as a fabrication: "
+                 "the single largest source of false positives in this check.",
     },
     {
         "id": "invented-reason",

@@ -49,6 +49,7 @@ QUALITY_DONE = "quality.done"
 COST = "cost"
 AUDIT_APPEND = "audit.append"
 SESSION_RISK = "session.risk"
+CROSS_RECORD = "cross_record"
 ERROR = "error"
 DONE = "done"
 

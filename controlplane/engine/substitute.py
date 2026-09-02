@@ -36,6 +36,7 @@ from controlplane.engine.api import (
     Finding,
     RequestScope,
     RestoreResult,
+    ScanOptions,
     ScanResult,
 )
 from controlplane.engine.knownvalue import KnownValueStore, normalise
@@ -79,7 +80,13 @@ class SubstitutionEngine:
         """
         return RequestScope()
 
-    def scan_inbound(self, text: str, scope: RequestScope | None = None) -> ScanResult:
+    def scan_inbound(
+        self,
+        text: str,
+        scope: RequestScope | None = None,
+        *,
+        options: ScanOptions | None = None,
+    ) -> ScanResult:
         """Make `text` safe to send upstream.
 
         Pass the same `scope` to every scan in one request. Without it each
@@ -96,7 +103,11 @@ class SubstitutionEngine:
         app beats a leak.
         """
         try:
-            return self._scan_inbound(text, scope if scope is not None else RequestScope())
+            return self._scan_inbound(
+                text,
+                scope if scope is not None else RequestScope(),
+                options or ScanOptions(),
+            )
         except Exception as exc:  # pragma: no cover - defensive by design
             return ScanResult(
                 text="",
@@ -104,13 +115,15 @@ class SubstitutionEngine:
                 block_reason=f"scanner error, failing closed: {type(exc).__name__}: {exc}",
             )
 
-    def _scan_inbound(self, text: str, scope: RequestScope) -> ScanResult:
+    def _scan_inbound(self, text: str, scope: RequestScope, options: ScanOptions) -> ScanResult:
         if not isinstance(text, str):
             return ScanResult(text="", blocked=True, block_reason="prompt is not text")
         if not text:
             return ScanResult(text="", mapping=dict(scope.mapping))
 
-        candidates = self._reconcile(self._candidates(text))
+        candidates = self._reconcile(
+            self._candidates(text, known_value_matching=options.known_value_matching)
+        )
 
         findings: list[Finding] = []
         # Identity and numbering live on the scope, so they carry across every
@@ -143,6 +156,31 @@ class SubstitutionEngine:
                         kind=cand.kind,
                         category=cand.category,
                         action="block",
+                        span=cand.span,
+                        confidence=cand.confidence,
+                        record_ref=cand.record_ref,
+                        placeholder=None,
+                    )
+                )
+                continue
+
+            if not options.substitute_pii:
+                # A code-assistant route (InboundPolicy.substitute_pii, which
+                # the compiler will not let a profile disable without a
+                # written waiver). The value is NOT placeholdered and does
+                # reach the provider - but the finding is still raised, so it
+                # reaches the audit line, the metrics and the screen. Silence
+                # would be the dangerous version of this switch; a recorded
+                # decision is the defensible one.
+                #
+                # Credentials never arrive here: `action == "block"` returned
+                # above, before this branch, and the compiler refuses a
+                # profile that turns credential blocking off at all.
+                findings.append(
+                    Finding(
+                        kind=cand.kind,
+                        category=cand.category,
+                        action="observed",
                         span=cand.span,
                         confidence=cand.confidence,
                         record_ref=cand.record_ref,
@@ -209,7 +247,7 @@ class SubstitutionEngine:
 
     # -- outbound ----------------------------------------------------------
 
-    def scan_outbound(self, text: str) -> ScanResult:
+    def scan_outbound(self, text: str, *, options: ScanOptions | None = None) -> ScanResult:
         """Check a model response before it reaches the reader.
 
         The asymmetry (IDEATION section 9.6): inbound we substitute, outbound
@@ -226,13 +264,21 @@ class SubstitutionEngine:
             if not isinstance(text, str) or not text:
                 return ScanResult(text=text if isinstance(text, str) else "")
 
-            candidates = self._reconcile(self._candidates(text))
+            opts = options or ScanOptions()
+            candidates = self._reconcile(
+                self._candidates(text, known_value_matching=opts.known_value_matching)
+            )
             findings: list[Finding] = []
             reasons: list[str] = []
             out = text
 
             for cand in sorted(candidates, key=lambda c: c.span[0], reverse=True):
                 if cand.role == "operand":
+                    continue
+                if not opts.scan_pii and cand.action != "block":
+                    # Outbound PII scanning off for this route. Credentials
+                    # still block - that is the half that is irreversible the
+                    # moment it renders, and no profile may switch it off.
                     continue
                 if cand.action != "block":
                     findings.append(
@@ -311,8 +357,12 @@ class SubstitutionEngine:
 
     # -- internals ---------------------------------------------------------
 
-    def _candidates(self, text: str) -> list[_Candidate]:
-        found = [
+    def _candidates(self, text: str, *, known_value_matching: bool = True) -> list[_Candidate]:
+        # The record-store tier is what produces `record_ref`, so turning it
+        # off does not weaken detection into silence - it drops the request
+        # to the pattern + checksum tier, exactly where an ungoverned source
+        # already sits (D28). The audit line gets weaker and says so.
+        found = [] if not known_value_matching else [
             _Candidate(
                 span=hit.span,
                 text=hit.text,

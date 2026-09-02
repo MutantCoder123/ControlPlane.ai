@@ -44,18 +44,26 @@ ENFORCEMENT: dict[str, FieldState] = {
     "name": _on("selects the profile"),
     "description": _on("shown on the Profiles page"),
     "geography": _on("selects the jurisdiction floor clamped in at compile time (D29)"),
-    "audit_level": _off("declared only - GAP-CLOSURE-PLAN phase 2.4"),
+    "audit_level": _on(
+        "record_scan(level=...) - 'full' adds the policy fingerprint, the "
+        "resolved tier, the decision reasons and per-finding spans. More about "
+        "the decision, never more about the content"
+    ),
     "fingerprint": _on("content hash; proves two servers run identical rules"),
 
     # -- inbound --------------------------------------------------------
-    "inbound.substitute_pii": _off(
-        "declared only - phase 2.1. Compile-time it already demands a written "
-        "waiver, so it cannot be flipped silently; the engine does not yet act on it"
+    "inbound.substitute_pii": _on(
+        "ScanOptions.substitute_pii - off leaves PII in place but still raises the "
+        "finding as `observed`, and credentials block regardless. Requires a "
+        "written waiver to compile"
     ),
     "inbound.block_credentials": _on(
         "the compiler refuses to build a profile that disables it (IDEATION 9.5)"
     ),
-    "inbound.known_value_matching": _off("declared only - phase 2.1"),
+    "inbound.known_value_matching": _on(
+        "ScanOptions.known_value_matching - off drops to the pattern + checksum "
+        "tier, so findings lose their record_ref exactly as an ungoverned source does"
+    ),
     "inbound.pii_waiver_reason": _on(
         "required when substitute_pii is false; travels into the fingerprint"
     ),
@@ -64,11 +72,15 @@ ENFORCEMENT: dict[str, FieldState] = {
     "outbound.block_credentials": _on(
         "the compiler refuses to build a profile that disables it (IDEATION 9.6)"
     ),
-    "outbound.scan_pii": _off("declared only - phase 2.1"),
-    "outbound.cross_tenant_check": _off(
-        "declared only - phase 2.2, where it is renamed cross_record_check, "
-        "because there is no tenant in the data model. The compiler already "
-        "refuses it without scan_pii, so the pair cannot be incoherent"
+    "outbound.scan_pii": _on(
+        "ScanOptions.scan_pii - off skips the outbound PII scan for latency; "
+        "the credential half is untouched"
+    ),
+    "outbound.cross_record_check": _on(
+        "compares record references in the restored answer against those in the "
+        "request; anything extra is a disclosure the reader did not ask for, and "
+        "is irreversible. Renamed from cross_tenant_check: there is no tenant in "
+        "this data model, so the old name claimed a structure that does not exist"
     ),
 
     # -- streaming ------------------------------------------------------
@@ -96,8 +108,10 @@ ENFORCEMENT: dict[str, FieldState] = {
         "declared only - phase 5.4, narrowed to exact-match caching. "
         "Semantic caching stays unbuilt (D13)"
     ),
-    "cost.max_output_tokens": _off("declared only - phase 2.3"),
-    "cost.request_budget_usd": _off("declared only - phase 2.3"),
+    "cost.max_output_tokens": _on("Ollama num_predict - caps generation at the ceiling"),
+    "cost.request_budget_usd": _on(
+        "CostLedger.check_budget, called before dispatch so a refusal costs 0.00"
+    ),
 
     # -- session --------------------------------------------------------
     "session.max_records_per_session": _on("cumulative disclosure budget (D4)"),

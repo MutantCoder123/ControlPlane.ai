@@ -28,7 +28,11 @@ def runtime():
 def drive(runtime, prompt, chunks, **kw) -> list[dict]:
     """Run the pipeline with a scripted model reply. Returns every event."""
 
-    async def fake(_prompt):
+    async def fake(_prompt, **kw):
+        # `**kw` mirrors the real `_ollama_chunks`, which gained
+        # `max_output_tokens` when the profile's generation cap was wired
+        # (phase 2.3). A fake that does not accept what the real signature
+        # accepts stops being a fake of it.
         for chunk in chunks:
             yield chunk
 
@@ -595,3 +599,194 @@ def test_agent_steps_accumulate_toward_the_step_budget(runtime):
     assert risk["over_budget"]
     assert "agent sprawl" in risk["reasons"][0]
     assert one(events, "scan.inbound")["side"] == "inside"
+
+
+# --------------------------------------------------------------------------
+# Cost enforcement (phase 2.3) - the pre-flight gate's budget step
+# --------------------------------------------------------------------------
+
+def test_an_over_budget_request_is_refused_before_the_model_is_called(runtime):
+    """The assertion that matters is not the error message - it is that the
+    model was never invoked. `CostLedger.check_budget` was written and tested
+    in Phase 4 and called by nothing on the live path until now, so a budget
+    could be declared in policy and blown every request.
+
+    Refusing here costs 0.00 for the same reason the credential refusal does:
+    billing starts when generation starts, so a check that runs after dispatch
+    has already paid for the request it is about to refuse.
+    """
+    called = []
+
+    async def spy(_prompt, **kw):
+        called.append(_prompt)
+        yield "this must never be generated"
+
+    import controlplane.demo.orchestrator as orch
+    from controlplane.policy.store import ControlPlane
+
+    # A budget small enough that any real prompt exceeds it.
+    runtime.store.publish(ControlPlane().compile_bundle(
+        overrides={"internal-knowledge": {"cost": {"request_budget_usd": 0.0000001}}}
+    ))
+
+    real, orch._ollama_chunks = orch._ollama_chunks, spy
+    try:
+        async def collect():
+            return [e async for e in runtime.run("Summarise the account position.")]
+        events = asyncio.run(collect())
+    finally:
+        orch._ollama_chunks = real
+
+    assert called == [], "the model was called for a request we had already refused"
+    block = one(events, "block")
+    assert block["where"] == "budget"
+    assert block["cost_usd"] == 0.0
+    assert stages(events, "dispatch") == []
+    assert one(events, "done")["outcome"] == "blocked_budget"
+
+
+def test_a_request_inside_its_budget_is_untouched(runtime):
+    """The guard on the test above: a budget that is not exceeded must not
+    change anything, or the gate is just an outage."""
+    events = drive(runtime, "Refund Priya Sharma 45230.", ["Refunded."])
+    assert stages(events, "block") == []
+    assert stages(events, "dispatch")
+
+
+def test_the_profiles_generation_cap_reaches_the_model_call(runtime):
+    """`cost.max_output_tokens` was declared on all three profiles and read by
+    nobody. Ollama honours `num_predict`, verified to stop at exactly the
+    limit, so the ceiling is now real rather than advisory."""
+    seen = {}
+
+    async def spy(_prompt, **kw):
+        seen.update(kw)
+        yield "ok"
+
+    import controlplane.demo.orchestrator as orch
+    real, orch._ollama_chunks = orch._ollama_chunks, spy
+    try:
+        async def collect():
+            return [e async for e in runtime.run("A note about the account.")]
+        asyncio.run(collect())
+    finally:
+        orch._ollama_chunks = real
+
+    profile = runtime.store.profile_for(None)
+    assert seen.get("max_output_tokens") == profile.cost.max_output_tokens
+
+
+# --------------------------------------------------------------------------
+# Sources (phase 2.5) - judged against the document, not just the question
+# --------------------------------------------------------------------------
+
+_DOC = "Refund policy: customers may request a refund within 30 days of purchase."
+_ANSWER = "The policy allows a refund within 30 days of purchase."
+
+
+def test_without_sources_a_correct_but_new_fact_reads_as_invented(runtime):
+    """The behaviour before phase 2.5, kept as a test rather than a memory.
+    `sources` was hardcoded empty, so the answer could only ever be compared
+    against the question - and anything true but not restated in the question
+    was indistinguishable from a fabrication."""
+    events = drive(runtime, "What is the refund window?", [_ANSWER])
+    flagged = [f["evidence"] for f in stages(events, "quality.finding")]
+    assert any("30" in f for f in flagged), "expected the ungrounded figure to flag"
+    assert one(events, "quality.done")["grounded_against"] == "question only"
+
+
+def test_with_the_document_the_same_answer_is_clean(runtime):
+    """Same model output, same question, one thing added: the source it was
+    supposed to be drawing on."""
+    events = drive(runtime, "What is the refund window?", [_ANSWER], sources=_DOC)
+    flagged = [f["evidence"] for f in stages(events, "quality.finding")]
+    assert not any("30" in f for f in flagged), f"still flagged with sources: {flagged}"
+    assert one(events, "quality.done")["grounded_against"] == "question + sources"
+
+
+def test_sources_do_not_excuse_something_absent_from_them(runtime):
+    """The guard. Supplying a document must ground what it contains and
+    nothing else - otherwise `sources` becomes a way to switch the check off."""
+    events = drive(
+        runtime,
+        "What is the refund window?",
+        ["The policy allows a refund within 30 days, and a 99 percent fee applies."],
+        sources=_DOC,
+    )
+    flagged = [f["evidence"] for f in stages(events, "quality.finding")]
+    assert any("99" in f for f in flagged), "an invented figure must still flag"
+
+
+# --------------------------------------------------------------------------
+# Cross-record disclosure (phase 2.2) - D21's failure mode, made checkable
+# --------------------------------------------------------------------------
+
+_LEAK = "Priya Sharma is confirmed. I also checked Rajesh Kumar, whose balance is fine."
+_ASK = "Check the account for Priya Sharma."
+
+
+def _with_cross_record(runtime, profile_name, **overrides):
+    """Publish a bundle with the check on for `profile_name`."""
+    from controlplane.policy.store import ControlPlane
+    base = {"outbound": {"cross_record_check": True, "scan_pii": True}}
+    base.update(overrides)
+    runtime.store.publish(ControlPlane().compile_bundle(overrides={profile_name: base}))
+
+
+def test_a_record_the_request_never_mentioned_is_caught(runtime):
+    """The model volunteered a second customer. Nothing substituted it - it
+    was never a placeholder - so it survives restore as literal text and the
+    known-value store recognises whose it is."""
+    events = drive(runtime, _ASK, [_LEAK], profile_name="customer-support")
+    crossed = one(events, "cross_record")
+    assert crossed["crossed"] == ["customer:44220"]
+    assert crossed["in_request"] == ["customer:44219"]
+
+
+def test_it_is_treated_as_irreversible(runtime):
+    """A disclosure, not an annotation. The reader has been shown a record
+    they did not ask about and no marking un-shows it."""
+    events = drive(runtime, _ASK, [_LEAK], profile_name="customer-support")
+    assert one(events, "cross_record")["reversible"] is False
+
+
+def test_the_public_facing_route_blocks_it(runtime):
+    events = drive(runtime, _ASK, [_LEAK], profile_name="customer-support")
+    assert one(events, "cross_record")["tier"] == "block"
+
+
+def test_it_blocks_on_every_route_that_runs_it(runtime):
+    """Not the "same finding, two outcomes" story, and deliberately so.
+
+    A known-value match is CERTAIN - the record store matched exactly - so the
+    signal carries confidence 1.0, which clears every profile's block_at. The
+    first version of this test asserted that internal-knowledge would merely
+    review it, and that was an overclaim written to make a nicer demo: it
+    would have required either weakening a certain signal or raising a
+    threshold, both of which trade real protection for a talking point.
+
+    Being shown a record you did not ask about is irreversible on any route.
+    Where the profile DOES decide is whether the check runs at all - see the
+    test below - which is the honest version of the same argument.
+    """
+    _with_cross_record(runtime, "internal-knowledge")
+    events = drive(runtime, _ASK, [_LEAK], profile_name="internal-knowledge")
+    crossed = one(events, "cross_record")
+    assert crossed["crossed"] == ["customer:44220"]
+    assert crossed["tier"] == "block"
+
+
+def test_naming_only_the_requested_record_is_not_a_crossing(runtime):
+    """The guard against the obvious false positive: answering about the
+    person who was asked about must never fire this."""
+    events = drive(
+        runtime, _ASK,
+        ["Priya Sharma's account is in good standing."],
+        profile_name="customer-support",
+    )
+    assert stages(events, "cross_record") == []
+
+
+def test_the_check_is_off_unless_the_profile_asks_for_it(runtime):
+    events = drive(runtime, _ASK, [_LEAK], profile_name="internal-knowledge")
+    assert stages(events, "cross_record") == []

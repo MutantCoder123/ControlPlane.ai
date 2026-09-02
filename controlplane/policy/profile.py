@@ -73,7 +73,14 @@ class OutboundPolicy:
     scan_pii: bool = False
     #: Family A inverts the asymmetry (D21): in a customer-facing bot the
     #: catastrophic direction is outbound, customer X shown customer Y.
-    cross_tenant_check: bool = False
+    #:
+    #: Named `cross_tenant_check` until 2026-09-02. There is no tenant in this
+    #: data model, so the old name claimed a structure that does not exist -
+    #: and a setting that cannot mean what it says cannot be implemented
+    #: honestly. What IS implementable, with the machinery already here, is
+    #: cross-RECORD: the response references a record that was not in the
+    #: request. That is D21's failure mode exactly, and it is what this now does.
+    cross_record_check: bool = False
 
 
 @dataclass(frozen=True)
@@ -352,9 +359,9 @@ def _validate(p: Profile) -> None:
             f"{p.name}: inbound.substitute_pii is false, which sends real PII to the "
             "provider. Set inbound.pii_waiver_reason to say why, in writing"
         )
-    if p.outbound.cross_tenant_check and not p.outbound.scan_pii:
+    if p.outbound.cross_record_check and not p.outbound.scan_pii:
         raise PolicyError(
-            f"{p.name}: cross_tenant_check needs outbound.scan_pii enabled to have "
+            f"{p.name}: cross_record_check needs outbound.scan_pii enabled to have "
             "anything to check"
         )
 
@@ -379,7 +386,7 @@ _STRICTER_MIN_MAX = {
 _STRICTER_TRUE = {
     ("decision", "always_review"),
     ("outbound", "scan_pii"),
-    ("outbound", "cross_tenant_check"),
+    ("outbound", "cross_record_check"),
 }
 
 _AUDIT_RANK = {"standard": 0, "full": 1}

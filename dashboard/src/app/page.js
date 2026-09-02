@@ -20,6 +20,11 @@ export default function Transit() {
   const [presets, setPresets] = useState([]);
   const [activePreset, setActivePreset] = useState(null);
   const [prompt, setPrompt] = useState('');
+  /* Reference material the answer may draw on. Empty means the
+   * hallucination check compares against the question alone, which is
+   * what it always did before phase 2.5 - and why anything correct but
+   * new read as invented. */
+  const [sources, setSources] = useState('');
   const [profile, setProfile] = useState('internal-knowledge');
   const [profiles, setProfiles] = useState([]);
   const [running, setRunning] = useState(false);
@@ -54,6 +59,7 @@ export default function Transit() {
   const pick = (p) => {
     setActivePreset(p.id);
     setPrompt(p.prompts ? p.prompts[0] : p.prompt);
+    setSources(p.sources ?? '');
     if (p.profile) setProfile(p.profile);
   };
 
@@ -67,7 +73,7 @@ export default function Transit() {
     flush();
 
     return runStream(
-      { prompt: promptText, profile, sessionId, agentSteps: opts.agentSteps ?? 0 },
+      { prompt: promptText, profile, sessionId, agentSteps: opts.agentSteps ?? 0, sources },
       (e) => {
         acc.events.push(e);
         switch (e.stage) {
@@ -194,6 +200,14 @@ export default function Transit() {
           disabled={running}
           placeholder="Paste anything. Try a real customer record."
           spellCheck={false}
+        />
+        <textarea
+          value={sources}
+          onChange={(e) => setSources(e.target.value)}
+          disabled={running}
+          placeholder="Reference material (optional) — the document this answer is allowed to draw on. Leave empty and the hallucination check has only the question to compare against."
+          spellCheck={false}
+          style={{ minHeight: 64, marginTop: 8, fontSize: 12.5 }}
         />
         <div className="composer-row">
           <select value={profile} onChange={(e) => setProfile(e.target.value)} disabled={running}>

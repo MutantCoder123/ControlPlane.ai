@@ -47,7 +47,7 @@ def test_profiles_actually_differ(store):
 def test_customer_facing_inverts_the_asymmetry(store):
     """D21 - in family A the catastrophic direction is outbound."""
     p = store.profile_for("customer-support")
-    assert p.outbound.scan_pii and p.outbound.cross_tenant_check
+    assert p.outbound.scan_pii and p.outbound.cross_record_check
     assert p.quality.toxicity_sync, "only place a slur reaches a member of the public"
     assert p.quality.hallucination_tier == 2, "customer-facing skips to tier 2"
 
@@ -151,9 +151,9 @@ def test_the_waiver_reason_travels_into_the_artefact():
 
 
 def test_incoherent_combination_is_refused():
-    with pytest.raises(PolicyError, match="cross_tenant_check"):
+    with pytest.raises(PolicyError, match="cross_record_check"):
         compile_profile(
-            {"name": "a", "outbound": {"cross_tenant_check": True, "scan_pii": False}}
+            {"name": "a", "outbound": {"cross_record_check": True, "scan_pii": False}}
         )
 
 

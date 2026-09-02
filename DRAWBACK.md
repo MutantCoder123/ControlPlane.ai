@@ -1279,3 +1279,66 @@ It now fails to compile.
   numpy is pinned: the toxicity model is a pickled artefact that already warns
   under NumPy 2.5, and an unpinned float breaks it on a clean install at the
   worst possible moment. 484 tests.
+
+- **2026-09-02** — **Gap-closure phase 2: six settings stop being decorative.**
+  `EXPLAINED.md` §8.2 listed eleven profile fields that no code read. Four
+  remain, and each is scheduled: `hallucination_tier`, `toxicity_sync` and
+  `counterfactual_sample_rate` in phase 4, `cache_enabled` in phase 5.
+
+  **ScanOptions (ADR-1).** Three settings change what the *engine* does, and
+  the engine must not learn what a `Profile` is — `EngineConfig` has said so
+  since Portion 1. They arrive as a small frozen `ScanOptions`, keyword-only
+  and defaulted, so every call site that predates this (including Track B's
+  gateway) behaves identically; a test asserts that rather than assuming it.
+  `known_value_matching: false` drops to the pattern tier, where findings lose
+  their `record_ref` exactly as an ungoverned source already does (D28).
+  `substitute_pii: false` leaves PII in place **but still raises the finding**,
+  marked `observed` rather than `substitute` — recording that we substituted
+  something we actually sent would be a lie in the audit record. Two tests
+  assert a credential still blocks under both switches, because a PII decision
+  may never become a credential decision. CONTRACTS §3 amended in the same
+  commit, following the `RequestScope` precedent.
+
+  **The budget gate is on the live path.** `CostLedger.check_budget` was
+  written and tested in Phase 4 and called by nothing, so a `request_budget_usd`
+  could be declared in policy and blown on every request. It now runs *before*
+  dispatch, for the same reason the credential refusal does: billing starts
+  when generation starts, so a check that runs after dispatch has already paid
+  for the request it is about to refuse. The test asserts the model was never
+  invoked — not the error message, which is the assertion that would pass
+  while the money was already spent. `cost.max_output_tokens` reaches Ollama as
+  `num_predict`, verified to stop at exactly the limit.
+
+  **`audit_level` changes what an entry carries.** `full` adds the policy
+  fingerprint, the resolved tier, the decision reasons and per-finding spans —
+  more about the *decision*, never more about the *content*. A test searches
+  both levels' serialised entries for the customer name and the balance, which
+  is the check that would have caught a regression here at any point in this
+  project.
+
+  **`cross_tenant_check` renamed to `cross_record_check`, then built.** There is
+  no tenant in this data model, so the old name claimed a structure that does
+  not exist, and a setting that cannot mean what it says cannot be implemented
+  honestly. What the existing machinery *can* answer is cross-record: scan the
+  restored answer, and any record reference not present in the request is a
+  disclosure the reader never asked for. That is D21's failure mode exactly —
+  customer X shown customer Y.
+
+  **A test caught me overclaiming, and the claim lost.** The first version
+  asserted "same finding, two outcomes" — block on the public route, review
+  internally. It fails, because a known-value match is *certain*, so the signal
+  carries confidence 1.0 and clears every profile's `block_at`. Making that
+  story true would have meant softening a certain signal or raising a
+  threshold: trading real protection for a talking point. The finding blocks on
+  any route that runs it, the profile decides whether the check runs at all,
+  and the test now says so.
+
+  **`sources` is no longer hardcoded empty.** The hallucination check could only
+  ever compare an answer against the *question*, so anything correct but new
+  was indistinguishable from a fabrication — the largest single source of false
+  positives in it. Requests now carry optional reference material, the Transit
+  composer has a field for it, and a new preset shows the same answer judged
+  both ways: "30 days" reads as invented without the policy document and goes
+  quiet with it. Verified live, not only in tests. A third test asserts sources
+  ground only what they contain, so the field cannot become a way to switch the
+  check off. 510 tests.

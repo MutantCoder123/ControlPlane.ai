@@ -203,21 +203,36 @@ def record_scan(
     findings,
     prompt_fingerprint: str,
     blocked: bool,
+    level: str = "standard",
+    profile_fingerprint: str | None = None,
+    decision_tier: str | None = None,
+    decision_reasons=None,
 ) -> AuditEntry:
     """Log what a scan decided, carrying references rather than values.
 
     Note what is absent: the prompt, the matched text, the mapping. A finding
     contributes its category, its action, its confidence and its record
     reference - enough to reconstruct the decision, useless to an attacker.
+
+    `level` is the profile's `audit_level` (phase 2.4), and it changes how much
+    DECISION detail is kept - never how much CONTENT. That distinction is the
+    whole design: "full" adds the policy fingerprint the decision was made
+    under, the tier it resolved to, the reasons behind it, and each finding's
+    span. It adds no prompt, no value, no mapping, because there is no audit
+    level at which those become acceptable to store.
+
+    `decision-support` asks for "full" because a decision about a person has to
+    be reconstructable years later; the EU jurisdiction floor forces it on
+    every profile, which is what makes that clamp visible rather than notional.
     """
-    return log.append(
-        "scan",
-        request_id=request_id,
-        profile=profile,
-        policy_version=policy_version,
-        prompt_fingerprint=prompt_fingerprint,
-        blocked=blocked,
-        findings=[
+    payload = {
+        "request_id": request_id,
+        "profile": profile,
+        "policy_version": policy_version,
+        "prompt_fingerprint": prompt_fingerprint,
+        "blocked": blocked,
+        "audit_level": level,
+        "findings": [
             {
                 "kind": f.kind,
                 "category": f.category,
@@ -225,10 +240,17 @@ def record_scan(
                 "confidence": f.confidence,
                 "record_ref": f.record_ref,
                 "placeholder": f.placeholder,
+                **({"span": list(f.span)} if level == "full" and f.span else {}),
             }
             for f in findings
         ],
-    )
+    }
+    if level == "full":
+        # More about the DECISION, still nothing about the content.
+        payload["profile_fingerprint"] = profile_fingerprint
+        payload["decision_tier"] = decision_tier
+        payload["decision_reasons"] = list(decision_reasons or [])
+    return log.append("scan", **payload)
 
 
 def record_policy_change(

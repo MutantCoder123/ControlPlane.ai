@@ -39,7 +39,7 @@ export async function post(path, body) {
  * worst thing that can happen mid-take.
  */
 export async function runStream(
-  { prompt, profile, team = 'support', sessionId, agentSteps },
+  { prompt, profile, team = 'support', sessionId, agentSteps, sources },
   onEvent,
   signal,
 ) {
@@ -52,6 +52,7 @@ export async function runStream(
       team,
       session_id: sessionId ?? null,
       agent_steps: agentSteps ?? 0,
+      sources: sources ?? '',
     }),
     signal,
   });
