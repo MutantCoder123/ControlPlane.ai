@@ -10,7 +10,7 @@
   "outbound": {
     "block_credentials": true,
     "scan_pii": false,
-    "cross_tenant_check": false
+    "cross_record_check": false
   },
   "streaming": {
     "mode": "interactive",

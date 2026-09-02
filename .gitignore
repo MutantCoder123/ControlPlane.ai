@@ -20,3 +20,11 @@ Hackathon_guideline.txt
 
 # pitch narrative - working notes, not for the public repo
 PITCH.md
+
+# dashboard build output
+dashboard/.next/
+dashboard/node_modules/
+dashboard/out/
+
+# browser automation scratch
+.playwright-mcp/

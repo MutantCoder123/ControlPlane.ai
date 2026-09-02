@@ -92,3 +92,25 @@ def test_forget_drops_a_session(tracker):
     tracker.observe("s1")
     tracker.forget("s1")
     assert tracker.counters("s1") is None
+
+
+def test_per_call_limits_override_the_constructor_defaults(tracker):
+    """SessionPolicy (Phase 7) drives this per profile, not per tracker.
+
+    The same tracker instance is shared across profiles in the demo runtime,
+    so the budget has to be able to differ call-to-call rather than being
+    fixed once at construction.
+    """
+    # constructor default is 5; override down to 2 for this call
+    tracker.observe("s1", findings=[_Finding("customer:1")], max_records=2)
+    tracker.observe("s1", findings=[_Finding("customer:2")], max_records=2)
+    verdict = tracker.observe("s1", findings=[_Finding("customer:3")], max_records=2)
+    assert verdict.over_budget
+    assert "limit 2" in verdict.reasons[0]
+
+
+def test_omitting_the_override_keeps_the_constructor_default(tracker):
+    """No override -> no behaviour change for existing callers."""
+    for i in range(4):
+        verdict = tracker.observe("s1", findings=[_Finding(f"customer:{i}")])
+    assert not verdict.over_budget, "constructor default is 5; four records is fine"

@@ -111,3 +111,40 @@ class EngineConfig:
     bloom_error_rate: float = 0.001
     min_ngram: int = 1
     max_ngram: int = 3
+
+
+@dataclass(frozen=True)
+class ScanOptions:
+    """Per-request switches the CALLER derives from its policy profile.
+
+    WHY THIS EXISTS AND NOT A `Profile` ARGUMENT
+    --------------------------------------------
+    Three profile settings change what the engine does, and the engine must
+    not learn what a `Profile` is to honour them - `EngineConfig` above says
+    per-profile configuration lives in the compiled artefact, and importing
+    `policy/` from `engine/` would invert that. So the caller maps profile ->
+    options (see `policy/adapters.py`) and passes the result down. The engine
+    reads booleans; it never knows where they came from.
+
+    EVERY DEFAULT REPRODUCES TODAY'S BEHAVIOUR. Omitting the argument - which
+    every call site before 2026-09-02 does, including Track B's gateway - is
+    identical to passing `ScanOptions()`. That is what makes this additive
+    rather than a change to CONTRACTS section 3's guarantees.
+    """
+
+    #: Inbound. False = pattern + checksum tier only, no record-store lookup.
+    #: Findings then carry no `record_ref`, which is already how the
+    #: ungoverned path behaves (D28), so nothing downstream needs to change.
+    known_value_matching: bool = True
+
+    #: Inbound. False = do not placeholder PII. Legitimate for exactly one
+    #: route shape (a code assistant - see `InboundPolicy.substitute_pii`),
+    #: and the compiler demands a written waiver before a profile may ask for
+    #: it. Credentials still block: `action == "block"` candidates are
+    #: unaffected by this switch, by design and by test.
+    substitute_pii: bool = True
+
+    #: Outbound. False = check the response for credentials only, skipping
+    #: the PII scan. Outbound scanning costs latency that only some routes
+    #: need (D21's inverted threat model).
+    scan_pii: bool = True

@@ -1,0 +1,11 @@
+{
+  "name": "United States",
+  "description": "Illustrative jurisdictional floor - loosest of the three, reflecting a sector-by-sector rather than omnibus regulatory style. This is a mechanism for expressing jurisdiction-specific policy, not an implementation of any statute, and not legal advice.",
+  "audit_level": "standard",
+  "decision": {
+    "block_at": 0.90
+  },
+  "session": {
+    "max_records_per_session": 25
+  }
+}

@@ -91,6 +91,12 @@ class Signal:
     record_ref: str | None = None
     evidence: str | None = None     # what the user should actually check
     novel: bool = False             # no prior for this pattern
+    #: The harm was neutralised before dispatch. Substitution is the
+    #: mitigation (IDEATION section 9.3): the provider never receives the
+    #: value, so there is nothing left for a tier to prevent. Distinct from
+    #: `reversible`, which asks whether harm COULD be undone after the fact -
+    #: this asks whether it can still happen at all.
+    mitigated: bool = False
 
     @property
     def exemption_keys(self) -> tuple[str, ...]:
@@ -240,6 +246,20 @@ class DecisionEngine:
     def _tier_for(
         signal: Signal, profile: Profile, low: float, high: float, exempt: set[str]
     ) -> tuple[Tier, str]:
+        if signal.mitigated:
+            # Substitution already happened. The value never leaves the
+            # building, so blocking the request would prevent nothing and
+            # cost the user their answer - which is the whole reason we
+            # substitute rather than redact (IDEATION section 9.3).
+            #
+            # This is NOT an exemption. The finding still reaches the audit
+            # line, the metrics and the UI: it happened, and we say so. It
+            # just does not drive the tier. Getting this wrong the other way
+            # - via profile exemptions - would ALSO silence the ungoverned
+            # case, where nothing was substituted and the flag is the only
+            # coverage left (D28).
+            return Tier.ALLOW, "mitigated by substitution"
+
         if exempt & set(signal.exemption_keys):
             # A reviewer has already judged this not worth flagging here.
             # Credentials can never reach this branch - the compiler refuses
@@ -308,6 +328,13 @@ def signals_from_findings(findings, *, novel_categories: set[str] | None = None)
     substitution engine produces therefore arrives as `reversible=False`.
     Quality signals - hallucination, toxicity - come from a later phase and
     arrive reversible.
+
+    `action` decides `mitigated`, and that distinction is the whole inbound
+    design in one line. A finding we SUBSTITUTED is neutralised: the model
+    receives a placeholder and the value stays inside. A finding we could only
+    BLOCK - a credential - is not, because there is no safe form of it to
+    send. Treating both as live irreversible harm blocks every prompt
+    containing a customer name, which is the opposite of the product.
     """
     novel = novel_categories or set()
     return [
@@ -321,6 +348,7 @@ def signals_from_findings(findings, *, novel_categories: set[str] | None = None)
                 f"matched {f.record_ref}" if f.record_ref else f"matched {f.category} pattern"
             ),
             novel=f.category in novel,
+            mitigated=f.action == "substitute",
         )
         for f in findings
     ]

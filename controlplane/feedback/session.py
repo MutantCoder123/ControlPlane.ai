@@ -99,8 +99,19 @@ class SessionRiskTracker:
         findings=(),
         blocked: bool = False,
         agent_steps: int = 0,
+        max_records: int | None = None,
+        max_agent_steps: int | None = None,
     ) -> SessionVerdict:
-        """Fold one request's outcome into the session's counters."""
+        """Fold one request's outcome into the session's counters.
+
+        `max_records` / `max_agent_steps` override the tracker's own defaults
+        for this one call, when the caller has a per-profile budget (Phase 7's
+        `SessionPolicy`) - a support bot fielding hundreds of customers and a
+        decision-support tool working one case file need different caps, so
+        the limit is a policy value, not fixed at construction. Omitted, the
+        constructor defaults apply unchanged - existing callers see no
+        behaviour change.
+        """
         counters = self._sessions.get(session_id)
         if counters is None:
             if len(self._sessions) >= self.max_sessions:
@@ -117,15 +128,18 @@ class SessionRiskTracker:
             if ref:
                 counters.records_touched.add(ref)
 
+        records_limit = self.max_records if max_records is None else max_records
+        steps_limit = self.max_steps if max_agent_steps is None else max_agent_steps
+
         reasons: list[str] = []
-        if counters.distinct_records > self.max_records:
+        if counters.distinct_records > records_limit:
             reasons.append(
                 f"cumulative disclosure: {counters.distinct_records} distinct records "
-                f"across {counters.turns} turns (limit {self.max_records})"
+                f"across {counters.turns} turns (limit {records_limit})"
             )
-        if counters.agent_steps > self.max_steps:
+        if counters.agent_steps > steps_limit:
             reasons.append(
-                f"agent sprawl: {counters.agent_steps} steps (limit {self.max_steps})"
+                f"agent sprawl: {counters.agent_steps} steps (limit {steps_limit})"
             )
         return SessionVerdict(bool(reasons), reasons, counters)
 

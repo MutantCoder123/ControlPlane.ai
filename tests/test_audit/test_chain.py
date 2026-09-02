@@ -208,3 +208,74 @@ def test_export_is_one_json_object_per_line(log):
     log.append("scan", request_id="r0")
     log.append("scan", request_id="r1")
     assert len(log.export().splitlines()) == 2
+
+
+# --------------------------------------------------------------------------
+# audit_level (phase 2.4) - more DECISION detail, never more CONTENT
+# --------------------------------------------------------------------------
+
+class _F:
+    """A finding, shaped as the engine emits one."""
+    def __init__(self, category="customer_name", ref="customer:44219", span=(7, 19)):
+        self.kind, self.category, self.action = "known_value", category, "substitute"
+        self.confidence, self.record_ref, self.placeholder = 1.0, ref, "[[CUST_A]]"
+        self.span = span
+
+
+def _entry(level, **kw):
+    log = AuditLog()
+    return record_scan(
+        log,
+        request_id="req_1",
+        profile="p",
+        policy_version=1,
+        findings=[_F()],
+        prompt_fingerprint="abc123",
+        blocked=False,
+        level=level,
+        **kw,
+    )
+
+
+def test_standard_is_what_it_always_was():
+    payload = _entry("standard").payload
+    assert payload["audit_level"] == "standard"
+    assert "profile_fingerprint" not in payload
+    assert "decision_tier" not in payload
+    assert "span" not in payload["findings"][0]
+
+
+def test_full_adds_the_context_a_decision_has_to_be_reconstructable_from():
+    payload = _entry(
+        "full",
+        profile_fingerprint="fp123",
+        decision_tier="review",
+        decision_reasons=["profile reviews every response"],
+    ).payload
+    assert payload["profile_fingerprint"] == "fp123"
+    assert payload["decision_tier"] == "review"
+    assert payload["decision_reasons"] == ["profile reviews every response"]
+    assert payload["findings"][0]["span"] == [7, 19]
+
+
+def test_neither_level_ever_carries_content():
+    """The test that would have caught a regression here at any point in this
+    project. `full` means more about the decision - it has never meant, and
+    must never mean, more about what the customer said."""
+    for level in ("standard", "full"):
+        blob = repr(_entry(
+            level,
+            profile_fingerprint="fp",
+            decision_tier="allow",
+            decision_reasons=["mitigated by substitution"],
+        ).payload)
+        for secret in ("Priya", "Sharma", "45230", "priya.sharma@example.com"):
+            assert secret not in blob, f"{level} leaked {secret!r}"
+
+
+def test_an_unknown_level_degrades_to_standard_rather_than_crashing():
+    """A profile compiled by a newer version, read by an older one. Failing
+    open on VOLUME of detail is safe; failing closed would lose the entry."""
+    payload = _entry("something-new").payload
+    assert "profile_fingerprint" not in payload
+    assert payload["findings"], "the entry itself must still be written"
