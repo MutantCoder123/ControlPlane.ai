@@ -11,34 +11,35 @@ one line — its `base_url` — and nothing else.
 
 ---
 
-## Status — Portion 1 in progress
+## Status — Portion 1 complete, both tracks merged
 
 > **This README is deliberately honest about what does not exist yet.** On a
 > public repo, a claim the code does not contain reads as vapour. See D23b in
 > [DRAWBACK.md](DRAWBACK.md). *(Owned by Track A since 2026-08-30 — see
-> CONTRACTS §1; Track B supplies the gateway section.)*
+> CONTRACTS §1. Track B's gateway and seed generator merged 2026-09-02.)*
+
+Counts are per test directory, so they sum to the total rather than
+double-counting: the phase rows below live inside the part rows above them.
 
 | Part | State | Tests |
 |---|---|---|
-| Substitution engine (P3) | ✅ done | 150 |
-| Profile engine / control plane (P2) | ✅ done | 28 |
-| Hash-chained audit log (P8) | ✅ done | 25 |
-| Gateway spine (P1) | 🔨 Track B | |
-| Seed data + traffic simulator (P13) | 🔨 Track B | |
-| Decision tiers + HITL (P6) | ✅ done | 24 |
-| Feedback loop (P9) | ✅ done | 22 |
-| Metrics + canaries (P10) | ✅ done | 22 |
-| Cost ledger (P11) | ✅ done | 25 |
+| Substitution engine (P3) | ✅ done | 160 |
+| Profile engine / control plane (P2) | ✅ done | 44 |
+| Hash-chained audit log (P8) | ✅ done | 20 |
+| Gateway spine (P1) | ✅ done | 28 |
+| Seed data + traffic simulator (P13) | ✅ done | *(within P1's 28)* |
+| Decision tiers + HITL (P6) | ✅ done | 26 |
+| Feedback loop (P9) | ✅ done | 27 |
+| Metrics + canaries (P10) | ✅ done | 25 |
+| Cost ledger (P11) | ✅ done | 22 |
 | Commit-point buffer (P4) | ✅ done | 28 |
 | Async quality checks (P7) | ✅ done (thin) | 57 |
-| Dashboard (P12) | ✅ done | 14 |
-| Session risk + jurisdiction floors (Phase 7 — D4, D29) | ✅ done | 21 |
-| Toxicity classifier (Phase 8 — D31) | ✅ done | 10 |
-| Dynamic bias probing (Phase 8 — D32) | ✅ done | 13 |
-| Hallucination depth: claim shapes + real confidence (Phase 8 — D33) | ✅ done | 19 |
+| Dashboard + demo pipeline (P12) | ✅ done | 33 |
+| Session risk + jurisdiction floors (Phase 7 — D4, D29) | ✅ done | *(within P9 and P2)* |
+| Toxicity, bias probing, hallucination depth (Phase 8 — D31–D33) | ✅ done | *(within P7 and P12)* |
 | Demo cut + repo (P14) | 🔨 in progress | |
 
-**442 tests, no network and no API key required to test.** The dashboard needs
+**470 tests, no network and no API key required to test.** The dashboard needs
 a local model; the toxicity check needs one pretrained classifier installed
 via `pip` (bundled weights, no separate download) — everything else runs
 offline.

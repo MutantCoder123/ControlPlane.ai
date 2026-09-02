@@ -1212,3 +1212,28 @@ It now fails to compile.
   more robust prompt rather than insisting on the fragile one. 19 new tests,
   two mutation-checked; two existing tests updated for the deliberate,
   disclosed per-entity return-shape change. 442 tests.
+
+- **2026-09-02** — **Gap-closure phase 0.** Committed and pushed the D31/D32/D33
+  work, then merged Track B's gateway spine and seed generator. This repository
+  had been shipping `controlplane/gateway/` and `controlplane/seed/` as ten-line
+  TODO stubs with an empty `tests/test_gateway/`, while the real 1,893 lines sat
+  on a fork — so the README's "change one line, your `base_url`" claim had no
+  runnable code behind it for anyone who cloned the public repo. The merge was
+  rehearsed on a throwaway branch first: it applied cleanly, and the only
+  deletions were the ten `# TODO(Track B)` markers. None of the collisions
+  anticipated in GAP-CLOSURE-PLAN.md phase 0.2 materialised, because our side
+  already held the newer copies of the files at issue.
+
+  The headline claim is now checkable rather than assertable —
+  `test_openai_client_with_only_base_url_changed` drives an unmodified
+  `openai.AsyncOpenAI` client at the gateway and reads back the restored real
+  name while the upstream saw only the placeholder.
+
+  Also corrected the counts that had drifted: the README's per-part test numbers
+  were stale (the substitution engine row said 150 against a real 160, the audit
+  row said 25 against 20) and did not sum to anything. They are now per test
+  directory and sum exactly to the total, with the phase rows marked as living
+  inside the part rows rather than adding to them. EXPLAINED.md §8.3 has been
+  rewritten from "ships as stubs" to the resolution, keeping the original
+  finding visible — a gap that was fixed and a gap that never existed are not
+  the same thing. 470 tests.

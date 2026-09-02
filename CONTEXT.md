@@ -5,11 +5,12 @@ session, a new model, or a teammate joining mid-stream. Everything below is
 *state*: what exists, what it does, what is decided, and what is left. The
 reasoning lives in the linked documents; this file is the map.
 
-Last updated: 2026-09-01 · **442 tests green** on Track A alone, ~470 with
-Track B merged. Phase 6 (the dashboard), Phase 7 (session risk + jurisdiction
-floors) and Phase 8 (a real toxicity classifier, D31; dynamic bias probing,
-D32; deeper hallucination detection with real per-token confidence, D33)
-are all built.
+Last updated: 2026-09-02 · **470 tests green, both tracks merged.** Phase 6
+(the dashboard), Phase 7 (session risk + jurisdiction floors) and Phase 8 (a
+real toxicity classifier, D31; dynamic bias probing, D32; deeper hallucination
+detection with real per-token confidence, D33) are all built. Track B's gateway
+and seed generator merged on 2026-09-02, so this repository no longer ships
+stubs for either.
 
 ---
 
@@ -89,7 +90,10 @@ injectable interface, the pipeline that joins the halves, and the deterministic
 **Reviewed and verified:** merges with zero conflicts, 384 tests pass, seed
 output conforms to CONTRACTS §2 exactly, and the engine matches against their
 real data (`customer:44219` fires; the Luhn-valid landmine card does not).
-Awaiting PR merge from their fork.
+**Merged 2026-09-02** (plan phase 0.2): the merge applied cleanly, the only
+deletions were the ten `# TODO(Track B)` stub markers, and
+`test_openai_client_with_only_base_url_changed` proves the one-line claim with
+an unmodified `openai` client.
 
 ---
 
@@ -162,7 +166,7 @@ decision to *fix* or *answer*. The ones that shape everything:
 
 | Phase | Parts | State |
 |---|---|---|
-| 1. Portion 1 | P3 (A) · P1 + P13 (B) | A ✅ · B ✅ *(pending merge)* |
+| 1. Portion 1 | P3 (A) · P1 + P13 (B) | ✅ both, merged 2026-09-02 |
 | 2. Policy & Audit | P2, P8 | ✅ |
 | 3. Decision & Feedback | P6, P9 | ✅ |
 | 4. Measurement & Cost | P10, P11 | ✅ |

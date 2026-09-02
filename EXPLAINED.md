@@ -579,7 +579,7 @@ Then the other four pages:
 ### Running the tests
 
 ```bash
-pytest -q          # 442 tests, no network and no API key needed
+pytest -q          # 470 tests, no network and no API key needed
 ```
 
 The house standard for a test is not "does it pass" but **"can it fail?"** —
@@ -636,29 +636,33 @@ judge who opens `policy/profile.py` and greps for one of them will find it read
 by nobody. Fixing the *documentation* here costs an hour; fixing the *code*
 costs more but not much (see 9.2).
 
-### 8.3 Stub files in this repository
+### 8.3 Stub files in this repository — RESOLVED 2026-09-02
 
-`controlplane/gateway/` and `controlplane/seed/` are **TODO stubs** here — 15,
-22, 12, 10 and 20 lines each, containing a docstring and
-`# TODO(Track B)`. `tests/test_gateway/` contains **zero tests**.
+*This section described the repository before the Track B merge. Kept, with the
+resolution recorded, because a fixed gap and a gap that was never there are not
+the same thing.*
 
-The real implementations exist on a teammate's fork
-(`trackb/track-b/gateway-and-seed`): roughly **1,900 lines** across
-`gateway/app.py`, `gateway/pipeline.py`, `gateway/upstream.py`,
-`gateway/context.py`, `seed/generate.py`, `seed/traffic.py` and 5 test files.
-That work is reviewed and reported to merge cleanly — but **it is not merged**,
-so a visitor cloning this repository today gets stubs.
+**Was:** `controlplane/gateway/` and `controlplane/seed/` shipped as TODO stubs
+— 10 to 22 lines each, a docstring and `# TODO(Track B)`. `tests/test_gateway/`
+contained zero tests. The README's headline claim ("the app changes one line —
+its `base_url`") had no runnable code behind it in this repository.
 
-**Consequence to be clear-eyed about:** the README's headline claim is "the app
-changes one line — its `base_url`". The code that would make that literally
-true (`/v1/chat/completions`) is the unmerged half. What runs today is the
-demo lane, which proves the same pipeline but is not a drop-in OpenAI endpoint.
+**Now:** merged (plan phase 0.2). 1,893 lines across `gateway/{app,pipeline,
+upstream,context}.py`, `seed/{generate,traffic}.py` and `scripts/
+demo_roundtrip.py`, plus 28 tests in `tests/test_gateway/`. The merge applied
+cleanly; the only deletions were the ten `# TODO(Track B)` markers.
+
+The claim is now checkable rather than assertable:
+`test_openai_client_with_only_base_url_changed` drives an unmodified
+`openai.AsyncOpenAI` client against the gateway with nothing changed but
+`base_url`, and asserts the caller reads back the restored real name while the
+upstream only ever saw the placeholder.
 
 ### 8.4 A gap between the two lanes
 
-Even after the merge, the two front doors do not run the same checks:
+**Still open after the merge** — this is what plan phase 3 exists to close:
 
-| Component | Demo lane (`demo/orchestrator.py`) | Real gateway (Track B's fork) |
+| Component | Demo lane (`demo/orchestrator.py`) | Real gateway (`gateway/pipeline.py`) |
 |---|---|---|
 | Substitution + restore | yes | yes |
 | Policy profiles | yes | yes |
@@ -819,10 +823,10 @@ controlplane/
   stream/    commit-point buffer, seam scanning                 [BUILT]
   quality/   hallucination, toxicity, bias                      [BUILT]
   demo/      the narrated pipeline plus 20 HTTP routes          [BUILT]
-  gateway/   the real OpenAI-compatible API                     [STUB - Track B]
-  seed/      synthetic customer records and traffic mix         [STUB - Track B]
+  gateway/   the real OpenAI-compatible API                     [BUILT, merged]
+  seed/      synthetic customer records and traffic mix         [BUILT, merged]
 dashboard/   Next.js, 5 pages, renders events only              [BUILT]
-tests/       442 tests                                          [test_gateway is empty]
+tests/       470 tests                                          [28 of them gateway]
 ```
 
 ### Glossary
