@@ -45,12 +45,19 @@ class PolicyError(ValueError):
 class InboundPolicy:
     """Protecting the organisation from its own paste habit."""
 
+    #: Off is legitimate for exactly one shape of route - a code assistant,
+    #: where developers paste variable names that look like identifiers and
+    #: placeholdering them would wreck the answer. It is NOT a general switch:
+    #: turning it off ships real PII to the provider, which is the harm this
+    #: product exists to prevent, so `_validate` demands a written waiver
+    #: naming the reason. Credentials block either way.
     substitute_pii: bool = True
     block_credentials: bool = True
-    #: Substitution off is legitimate for code assistants: developers paste
-    #: variable names that look like identifiers, and placeholdering them
-    #: would wreck the answer. Credentials still block.
     known_value_matching: bool = True
+    #: Free text, required when `substitute_pii` is false. Not decoration -
+    #: it lands in the compiled artefact and therefore in the audit chain, so
+    #: the decision to send real PII has an author and a stated reason.
+    pii_waiver_reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -326,6 +333,24 @@ def _validate(p: Profile) -> None:
         raise PolicyError(
             f"{p.name}: inbound.block_credentials cannot be disabled - there is no "
             "legitimate reason to send a credential to a model (IDEATION 9.5)"
+        )
+    # The outbound direction was declared but never guarded - an asymmetry
+    # with no argument behind it. A credential rendering to a reader's screen
+    # is irreversible the moment it appears, which is if anything the harder
+    # direction to undo, so it refuses on the same terms.
+    if not p.outbound.block_credentials:
+        raise PolicyError(
+            f"{p.name}: outbound.block_credentials cannot be disabled - a credential "
+            "that reaches the screen is irreversible (IDEATION 9.6)"
+        )
+    # Substitution may be turned off for a code-assistant route, but not
+    # silently: shipping real PII to a provider is a decision that needs an
+    # author. The reason travels in the artefact, so it reaches the audit
+    # chain with the fingerprint that changed.
+    if not p.inbound.substitute_pii and not p.inbound.pii_waiver_reason.strip():
+        raise PolicyError(
+            f"{p.name}: inbound.substitute_pii is false, which sends real PII to the "
+            "provider. Set inbound.pii_waiver_reason to say why, in writing"
         )
     if p.outbound.cross_tenant_check and not p.outbound.scan_pii:
         raise PolicyError(

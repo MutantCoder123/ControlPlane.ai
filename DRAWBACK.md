@@ -1237,3 +1237,45 @@ It now fails to compile.
   rewritten from "ships as stubs" to the resolution, keeping the original
   finding visible — a gap that was fixed and a gap that never existed are not
   the same thing. 470 tests.
+
+- **2026-09-02** — **Gap-closure phase 1: honesty.** Nothing on the Profiles
+  page now claims a behaviour the code does not have.
+
+  **One finding in my own audit was wrong, and is corrected rather than quietly
+  dropped.** EXPLAINED.md §8.2 listed `inbound.block_credentials` as declared
+  but unread. It is not: the compiler refuses to build a profile that disables
+  it, `test_credentials_cannot_be_allowed_through` covers it, and the Profiles
+  page has a button that demonstrates the refusal live. The audit's grep
+  excluded `policy/profile.py` — which is exactly where the guard lives. The
+  outbound twin genuinely *was* declared and unguarded, an asymmetry with no
+  argument behind it, and now refuses on the same terms: a credential that
+  reaches a reader's screen is irreversible the moment it renders.
+
+  **`substitute_pii` was going to be deleted, and should not have been.** The
+  plan's ADR-3 said any switch whose only effect is shipping real PII should be
+  removed. Reading the code first turned up a comment already documenting a
+  legitimate use: a code-assistant route, where developers paste variable names
+  that read as identifiers and placeholdering them wrecks the answer. Deleting
+  a real capability on my own say-so would have been the wrong call, so the
+  field stays and gains a guard instead — turning it off now requires
+  `inbound.pii_waiver_reason`, free text that lands in the compiled artefact
+  and therefore in the fingerprint and the audit chain. The decision to send
+  real PII can be made; it cannot be made anonymously or by accident.
+
+  **The declared-vs-enforced gap is now structural, not a one-time cleanup.**
+  `policy/enforcement.py` declares the state of all 29 profile fields with a
+  reason each; `/demo/profiles` serves it; the Profiles page greys every
+  declared-only row and chips it with the phase that will wire it. Crucially,
+  `test_enforcement.py` walks the `Profile` dataclasses and fails the build if
+  a field is added without an entry, or if an entry describes a field that no
+  longer exists. Verified by adding a field and watching it go red.
+
+  Three smaller corrections: the quote-mark false positive is fixed (a reply
+  opening `"Hey team,` no longer reports `Hey` as fabricated) — and the first
+  attempt at that fix was itself wrong, stripping whitespace and quotes in
+  separate passes so `She replied. "Hey` still failed, which the test caught
+  because it checks position fourteen and not only position zero. `RESTORE` is
+  gone from the event contract, where it had been declared and never emitted.
+  numpy is pinned: the toxicity model is a pickled artefact that already warns
+  under NumPy 2.5, and an unpinned float breaks it on a clean install at the
+  worst possible moment. 484 tests.

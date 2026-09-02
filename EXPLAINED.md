@@ -624,17 +624,25 @@ no code branches on them. A viewer would reasonably assume they do something.
 | `quality.hallucination_tier` | Profiles page | **No** — the same tier-0 check runs for every profile |
 | `quality.toxicity_sync` | Profiles page | **No** — toxicity always runs async (documented, D31) |
 | `quality.counterfactual_sample_rate` | (used in `decision-support`) | **No** — the bias probe is manual-only, never sampled from live traffic |
-| `inbound.substitute_pii`, `inbound.known_value_matching` | Profiles page | **No** — substitution always runs |
+| `inbound.substitute_pii`, `inbound.known_value_matching` | Profiles page | **No** — substitution always runs. *(Correction, 2026-09-02: `substitute_pii` now refuses to compile without a written waiver, so it cannot be flipped silently — but the engine still does not act on it. Phase 2.1)* |
 | `outbound.scan_pii`, `outbound.cross_tenant_check` | — | **No** — outbound scanning is not profile-conditional |
-| `inbound.block_credentials`, `outbound.block_credentials` | — | **No** — credential blocking is unconditional (safe direction, but not policy-driven) |
+| ~~`inbound.block_credentials`~~ | — | **This row was wrong.** The compiler refuses to build a profile that disables it, there is a test for it, and a dashboard button demonstrates the refusal live. The audit grep excluded `policy/profile.py`, which is exactly where the guard lives. `outbound.block_credentials` genuinely was unguarded and now refuses on the same terms |
 | `cost.cache_enabled`, `cost.max_output_tokens`, `cost.request_budget_usd` | — | **No** — caching was deliberately not built (D13); the budget gate exists and is tested but is never called on the live path |
 | `audit_level` | Profiles page | **No** — every entry is written the same way |
 
 **Why this matters:** two of these (`toxicity_sync`, `counterfactual_sample_rate`)
-are already written up honestly in DRAWBACK.md. The other six are not, and a
-judge who opens `policy/profile.py` and greps for one of them will find it read
-by nobody. Fixing the *documentation* here costs an hour; fixing the *code*
-costs more but not much (see 9.2).
+were already written up honestly in DRAWBACK.md. The others were not, and a
+judge who opens `policy/profile.py` and greps for one would have found it read
+by nobody.
+
+**Closed 2026-09-02 (plan phase 1.2), structurally rather than once.**
+`policy/enforcement.py` now declares the state of all 29 profile fields, the
+`/demo/profiles` payload carries it, and the Profiles page greys any
+declared-only row with a chip naming the phase that will wire it. A test walks
+the `Profile` dataclasses and fails the build if a new field arrives without an
+entry — so this class of gap can still exist, it just cannot be silent. One row
+above was also simply wrong, and is struck through rather than quietly
+deleted.
 
 ### 8.3 Stub files in this repository — RESOLVED 2026-09-02
 

@@ -15,6 +15,9 @@ export default function Profiles() {
   const [jurisdiction, setJurisdiction] = useState(null);
   const [jurisdictions, setJurisdictions] = useState([]);
   const [profiles, setProfiles] = useState([]);
+  //: Which settings below actually change behaviour. From the server's
+  //: own policy/enforcement.py, never guessed here.
+  const [enf, setEnf] = useState({});
   const [result, setResult] = useState(null);
   const [floorResult, setFloorResult] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -22,7 +25,10 @@ export default function Profiles() {
 
   const load = () =>
     get('/demo/profiles')
-      .then((d) => { setProfiles(d.profiles); setVersion(d.version); setJurisdiction(d.jurisdiction); })
+      .then((d) => {
+        setProfiles(d.profiles); setVersion(d.version); setJurisdiction(d.jurisdiction);
+        setEnf(d.enforcement ?? {});
+      })
       .catch((e) => setErr(e.message));
 
   useEffect(() => {
@@ -104,16 +110,16 @@ export default function Profiles() {
                 {p.description}
               </p>
 
-              <Row k="blocks at confidence" v={p.decision.block_at} />
-              <Row k="review band" v={`${p.decision.review_band[0]} – ${p.decision.review_band[1]}`} />
-              <Row k="flag budget / 100" v={p.decision.flag_budget_per_100} />
-              <Row k="reviews everything" v={p.decision.always_review ? 'yes' : 'no'} />
+              <Row k="blocks at confidence" v={p.decision.block_at} state={enf["decision.block_at"]} />
+              <Row k="review band" v={`${p.decision.review_band[0]} – ${p.decision.review_band[1]}`} state={enf["decision.review_band"]} />
+              <Row k="flag budget / 100" v={p.decision.flag_budget_per_100} state={enf["decision.flag_budget_per_100"]} />
+              <Row k="reviews everything" v={p.decision.always_review ? 'yes' : 'no'} state={enf["decision.always_review"]} />
               <Row k="streaming" v={`${p.streaming.mode}${p.streaming.buffered ? '' : ' · unbuffered'}`} />
-              <Row k="hold window" v={`${p.streaming.overlap_chars} chars`} />
-              <Row k="hallucination tier" v={p.quality.hallucination_tier} />
+              <Row k="hold window" v={`${p.streaming.overlap_chars} chars`} state={enf["streaming.overlap_chars"]} />
+              <Row k="hallucination tier" v={p.quality.hallucination_tier} state={enf["quality.hallucination_tier"]} />
               <Row k="exemptions" v={p.decision.exempt.length ? p.decision.exempt.join(', ') : 'none'} />
-              <Row k="session record cap" v={p.session.max_records_per_session} />
-              <Row k="audit level" v={p.audit_level} />
+              <Row k="session record cap" v={p.session.max_records_per_session} state={enf["session.max_records_per_session"]} />
+              <Row k="audit level" v={p.audit_level} state={enf["audit_level"]} />
 
               <div className="composer-row" style={{ marginTop: 14 }}>
                 <button
@@ -279,13 +285,26 @@ export default function Profiles() {
   );
 }
 
-function Row({ k, v }) {
+/* One setting. `state` comes from the server's enforcement map
+ * (policy/enforcement.py): a field that is declared but that no code reads
+ * yet is greyed and chipped, rather than sitting here looking identical to
+ * the ones that work. An audit found six of those on this page; the chip is
+ * how a viewer can tell them apart without reading the source. */
+function Row({ k, v, state }) {
+  const declaredOnly = state && state.enforced === false;
   return (
     <div style={{
-      display: 'flex', justifyContent: 'space-between', gap: 12,
+      display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline',
       padding: '5px 0', borderBottom: '1px solid rgba(39,49,63,0.6)', fontSize: 12.5,
+      opacity: declaredOnly ? 0.55 : 1,
     }}>
-      <span style={{ color: 'var(--text-faint)' }}>{k}</span>
+      <span style={{ color: 'var(--text-faint)' }}>
+        {k}
+        {declaredOnly && (
+          <span className="chip" data-kind="off" style={{ marginLeft: 6, fontSize: 10 }}
+                title={state.note}>declared only</span>
+        )}
+      </span>
       <span className="mono" style={{ color: 'var(--text)' }}>{String(v)}</span>
     </div>
   );

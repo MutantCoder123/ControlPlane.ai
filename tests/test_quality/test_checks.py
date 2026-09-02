@@ -43,6 +43,34 @@ def test_entities_are_numbers_and_proper_nouns():
     assert "45230" in entities
 
 
+def test_an_opening_quote_does_not_hide_the_sentence_start():
+    """Found live on 2026-09-02, in the D33 highlighting work: a reply that
+    began `"Hey team, ...` reported `Hey` as a fabricated entity. The quote
+    sat between the start of the text and the word, so the sentence-start
+    check saw a `"` rather than nothing and concluded it was mid-sentence.
+
+    The highlighting did not cause this - it only made a pre-existing false
+    positive visible, by underlining it inside the answer instead of listing
+    it below.
+    """
+    for opener in ['"Hey team, the update shipped."',
+                   "'Hey team, the update shipped.'",
+                   "(Hey team, the update shipped.)",
+                   "*Hey team, the update shipped.*"]:
+        assert "Hey" not in extract_entities(opener), opener
+
+
+def test_a_quote_mid_text_still_marks_the_next_sentence():
+    """The fix must not only work at position zero."""
+    assert "Hey" not in extract_entities('She replied. "Hey there."')
+
+
+def test_the_fix_does_not_swallow_a_real_single_word_entity():
+    """Guard: a capitalised word that is NOT at a sentence start is still
+    evidence, quote or no quote."""
+    assert "Rahul" in extract_entities('The customer said "ask Rahul about it".')
+
+
 def test_sentence_openers_are_not_treated_as_entities():
     """Otherwise every sentence produces a false 'invented entity'."""
     assert extract_entities("The refund was processed.") == set()

@@ -62,6 +62,7 @@ from __future__ import annotations
 
 import math
 import re
+import string
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import NamedTuple
@@ -143,9 +144,32 @@ def extract_entities(text: str) -> set[str]:
     return entities
 
 
+#: Characters that can sit between a sentence boundary and its first word
+#: without ending the sentence-initial position: an opening quote of either
+#: kind, a bracket, a markdown emphasis marker.
+_SENTENCE_LEAD = "\"'“‘([*"
+
+
 def _starts_a_sentence(text: str, index: int) -> bool:
-    # rstrip() has already removed any newline, so only punctuation matters.
-    before = text[:index].rstrip()
+    """Is the word at `index` the first word of a sentence?
+
+    A single capitalised word at a sentence start is not evidence of a proper
+    noun - English capitalises every sentence - so `extract_entities` skips
+    those, and this decides which ones qualify.
+
+    The opening-delimiter strip was added 2026-09-02, from a live false
+    positive: a reply beginning `"Hey team, ...` had `Hey` reported as a
+    fabricated entity, because the quote character sat between the start of
+    the text and the word, so `before[-1]` was `"` rather than empty. The
+    quote is not a sentence, and it never was; it just looked like content to
+    a check that only knew about full stops.
+    """
+    # Strip whitespace and openers TOGETHER, not one then the other: in
+    # `She replied. "Hey`, the quote has a space before it, so stripping
+    # whitespace first and quotes second leaves the space behind and the
+    # check still reads mid-sentence. Caught by the test below, which is
+    # why it tests position fourteen and not only position zero.
+    before = text[:index].rstrip(string.whitespace + _SENTENCE_LEAD)
     return not before or before[-1] in ".!?:"
 
 

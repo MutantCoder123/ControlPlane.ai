@@ -17,3 +17,11 @@ openai>=1.40          # used in tests as a real client against our own server
 # SVM over char n-grams), so `pip install` is the entire setup - no separate
 # download step, no network call at inference time.
 alt-profanity-check==1.9.0
+# Pinned deliberately, not by habit. `alt-profanity-check` ships its model as a
+# pickled artefact and pins scikit-learn itself, but leaves numpy floating -
+# and unpickling that artefact already emits a NumPy 2.5 deprecation warning
+# about setting `.shape` on an array. A future numpy that turns that warning
+# into an error breaks the toxicity check on a clean install, which is the
+# worst possible moment to find out. Raise this deliberately, with the suite
+# green, rather than discovering it on a fresh clone.
+numpy==2.5.2

@@ -102,6 +102,54 @@ def test_credentials_cannot_be_allowed_through():
         compile_profile({"name": "a", "inbound": {"block_credentials": False}})
 
 
+def test_outbound_credentials_cannot_be_allowed_through_either():
+    """The outbound direction was declared but ungurded until 2026-09-02 - an
+    asymmetry with no argument behind it. A credential that reaches the screen
+    is irreversible the moment it renders, which is if anything harder to undo
+    than one that was merely sent."""
+    with pytest.raises(PolicyError, match="outbound.block_credentials"):
+        compile_profile({"name": "a", "outbound": {"block_credentials": False}})
+
+
+def test_turning_off_substitution_requires_a_written_reason():
+    """`substitute_pii: false` ships real PII to the provider. That is
+    legitimate for exactly one route shape - a code assistant, where
+    placeholdering variable names wrecks the answer - and illegitimate
+    everywhere else, so it may not be flipped silently."""
+    with pytest.raises(PolicyError, match="pii_waiver_reason"):
+        compile_profile({"name": "a", "inbound": {"substitute_pii": False}})
+
+
+def test_a_written_waiver_lets_a_code_assistant_route_compile():
+    """The escape hatch has to actually work, or teams route around the
+    product instead of configuring it."""
+    p = compile_profile({
+        "name": "code-assistant",
+        "inbound": {
+            "substitute_pii": False,
+            "pii_waiver_reason": "variable names read as identifiers; credentials still block",
+        },
+    })
+    assert p.inbound.substitute_pii is False
+    assert "credentials still block" in p.inbound.pii_waiver_reason
+
+
+def test_the_waiver_reason_travels_into_the_artefact():
+    """The reason is only worth demanding if it survives compilation - it has
+    to reach the fingerprint, and therefore the audit chain, with the change
+    it justifies."""
+    p = compile_profile({
+        "name": "code-assistant",
+        "inbound": {"substitute_pii": False, "pii_waiver_reason": "stated reason"},
+    })
+    assert "stated reason" in str(p.to_dict())
+    other = compile_profile({
+        "name": "code-assistant",
+        "inbound": {"substitute_pii": False, "pii_waiver_reason": "a different reason"},
+    })
+    assert p.fingerprint != other.fingerprint, "the reason must change the fingerprint"
+
+
 def test_incoherent_combination_is_refused():
     with pytest.raises(PolicyError, match="cross_tenant_check"):
         compile_profile(

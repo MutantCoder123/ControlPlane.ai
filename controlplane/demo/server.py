@@ -31,6 +31,7 @@ from controlplane.demo.orchestrator import (
 )
 from controlplane.feedback.loop import PolicyTuner, Verdict, close_loop
 from controlplane.metrics.canary import CanarySuite
+from controlplane.policy import enforcement
 from controlplane.quality.checks import (
     NoSubjectToVary,
     OutcomeDistribution,
@@ -340,6 +341,12 @@ async def profiles():
         "version": runtime.store.version,
         "jurisdiction": current_jurisdiction,
         "profiles": out,
+        # Which of these settings actually change behaviour, and which are
+        # declared only (policy/enforcement.py). An audit on 2026-09-02 found
+        # six fields on this page that nothing read, and a viewer had no way
+        # to tell them from the ones that worked. Now the page can say so, and
+        # a test fails the build if a new field arrives undeclared.
+        "enforcement": enforcement.as_payload(),
     }
 
 
